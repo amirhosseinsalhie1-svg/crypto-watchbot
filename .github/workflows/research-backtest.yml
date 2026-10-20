@@ -1,4 +1,4 @@
-name: timeframe-and-setup-research
+name: timeframe-and-setup-and-retest-research
 
 on:
   workflow_dispatch:
@@ -15,6 +15,7 @@ on:
       - "config.trend-pullback.research.json"
       - "config.range-breakout.json"
       - "config.price-action-candlestick.json"
+      - "config.breakout-retest.json"
       - "tests/test_setup_*.py"
       - ".github/workflows/research-backtest.yml"
 
@@ -58,7 +59,7 @@ jobs:
       - name: Upload compact JSON reports (exclude bulky event ledgers)
         uses: actions/upload-artifact@v4
         with:
-          name: 5m-vs-15m-session-research-2026-09-01-to-09-08
+          name: 5m-vs-15m-retest-session-research-2026-09-01-to-09-08
           path: |
             runtime/reports/timeframe-comparison.json
             runtime/reports/*/*/report-dir/report.json

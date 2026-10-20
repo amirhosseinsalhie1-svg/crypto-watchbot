@@ -24,6 +24,7 @@ SETUPS = {
     "trend-pullback": "config.trend-pullback.research.json",
     "range-breakout-v1": "config.range-breakout.json",
     "price-action-candlestick-v1": "config.price-action-candlestick.json",
+    "breakout-retest-v1": "config.breakout-retest.json",
 }
 BASE_5M_MS = 300_000
 BASE_15M_MS = 900_000

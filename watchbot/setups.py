@@ -253,7 +253,131 @@ def evaluate_price_action_candlestick(a: Analysis, f: dict, now: int, cfg: Confi
 
 
 
+def evaluate_breakout_retest(a: Analysis, f: dict, now: int, cfg: Config, *,
+                             historical: bool = False):
+    """Enter only after a high-volume 20-bar breakout is retested and reclaimed.
+
+    The breakout must occur within the previous eight finalized bars. Entry is
+    simulated by the journal at the next bar open; no future candle is inspected.
+    """
+    daily, h4 = f["1d"].iloc[-1], f["4h"].iloc[-1]
+    bars = f["5m"]
+    current = bars.iloc[-1]
+    a.asof = int(current.close_time) + 1
+
+    if not historical and now - a.asof > cfg.max_signal_age_seconds * 1000:
+        a.status = "NO_SETUP"
+        a.reasons = ["آخرین کندل برای صدور هشدار ورود بیش از حد قدیمی است"]
+        return a, f
+
+    direction = (
+        1 if daily.close > daily.ema50 and daily.tenkan > daily.kijun else
+        -1 if daily.close < daily.ema50 and daily.tenkan < daily.kijun else 0
+    )
+    if not direction:
+        a.status = "NO_SETUP"
+        a.reasons = ["جهت روزانه برای ستاپ شکست و بازآزمایی همسو نیست"]
+        a.counterevidence = ["قیمت و تنکان/کیجون روزانه جهت مشترک ندارند"]
+        return a, f
+
+    a.side = "LONG" if direction == 1 else "SHORT"
+    cloud_edge = max(h4.span_a, h4.span_b) if direction == 1 else min(h4.span_a, h4.span_b)
+    aligned = (
+        direction * (h4.close - h4.ema50) > 0
+        and direction * (h4.close - cloud_edge) > 0
+        and direction * (h4.tenkan - h4.kijun) > 0
+    )
+    if not aligned:
+        a.status = "NO_SETUP"
+        a.reasons = ["جهت روزانه مشخص است"]
+        a.counterevidence = ["تأیید روند و ابر در ۴ساعته کامل نیست"]
+        return a, f
+
+    a.status = "PENDING"
+    a.reasons = ["روند روزانه و ۴ساعته همسو است"]
+    if len(bars) < 22:
+        a.status = "BLOCKED_DATA"
+        a.counterevidence = ["برای بررسی شکست ۲۰ کندلی و بازآزمایی سطح تاریخچه کافی نیست"]
+        return a, f
+
+    # Search only prior finalized candles, excluding the current retest candle.
+    breakout = None
+    first = max(20, len(bars) - 9)
+    for i in range(first, len(bars) - 1):
+        candle = bars.iloc[i]
+        prior = bars.iloc[i - 20:i]
+        level = float(prior.high.max()) if direction == 1 else float(prior.low.min())
+        span = float(candle.high - candle.low)
+        close_location = (float(candle.close - candle.low) / span) if span > 0 else .5
+        if direction == 1:
+            valid = (
+                candle.close > level and candle.close > candle.open
+                and candle.body_ratio >= .55 and candle.volume >= 1.2 * candle.prior_volume20
+                and close_location >= .75
+            )
+        else:
+            valid = (
+                candle.close < level and candle.close < candle.open
+                and candle.body_ratio >= .55 and candle.volume >= 1.2 * candle.prior_volume20
+                and close_location <= .25
+            )
+        if valid:
+            breakout = (i, level)
+    if breakout is None:
+        a.counterevidence = ["شکست پرحجم و معتبر سطح ۲۰ کندلی در ۸ کندل اخیر وجود ندارد"]
+        return a, f
+
+    _, level = breakout
+    atr = float(current.atr14)
+    span = float(current.high - current.low)
+    close_location = (float(current.close - current.low) / span) if span > 0 else .5
+    if direction == 1:
+        retest = (
+            current.low <= level + .15 * atr
+            and current.low >= level - .35 * atr
+            and current.close > level and current.close > current.open
+            and current.body_ratio >= .35 and close_location >= .65
+        )
+        stop = float(min(bars.iloc[-3:].low.min(), current.low) - .1 * atr)
+    else:
+        retest = (
+            current.high >= level - .15 * atr
+            and current.high <= level + .35 * atr
+            and current.close < level and current.close < current.open
+            and current.body_ratio >= .35 and close_location <= .35
+        )
+        stop = float(max(bars.iloc[-3:].high.max(), current.high) + .1 * atr)
+    if not retest:
+        a.counterevidence = ["قیمت سطح شکسته‌شده را لمس نکرده یا در سمت معتبر آن بسته نشده است"]
+        return a, f
+
+    entry = float(current.close)
+    risk = direction * (entry - stop)
+    if stop <= 0 or not cfg.min_stop_fraction <= risk / entry <= cfg.max_stop_fraction:
+        a.status = "BLOCKED_RISK"
+        a.counterevidence = ["فاصلهٔ حد ضرر ساختاری خارج از محدودهٔ آزمایشی است"]
+        return a, f
+
+    a.entry = entry
+    a.stop = stop
+    a.target = entry + direction * cfg.reward_risk * risk
+    a.status = "TECHNICAL_CONFIRMED"
+    a.reasons.extend([
+        "شکست ۲۰ کندلی با بدنهٔ قوی و حجم حداقل ۱٫۲ برابر میانگین تأیید شد",
+        "سطح شکسته‌شده بازآزمایی شد و کندل در سمت روند بالاتر بسته شد",
+    ])
+    a.counterevidence = [
+        "شکست و بازآزمایی ممکن است ناموفق باشد؛ این قواعد سودآوری را تضمین نمی‌کنند"
+    ]
+    if a.entry_session == "MONITOR_ONLY":
+        a.counterevidence.append("خارج از ساعت مجاز ورود؛ موقعیت باز همچنان مدیریت می‌شود")
+    key = f"breakout-retest-v1:{cfg.fingerprint()}:{cfg.source}:{a.symbol}:{a.asof}:{a.side}"
+    a.signal_id = hashlib.sha256(key.encode()).hexdigest()[:24]
+    return a, f
+
+
 def register_additional_setups(register_setup):
     """Called once by core after its built-in evaluator has been registered."""
     register_setup("range-breakout-v1", evaluate_range_breakout)
     register_setup("price-action-candlestick-v1", evaluate_price_action_candlestick)
+    register_setup("breakout-retest-v1", evaluate_breakout_retest)
