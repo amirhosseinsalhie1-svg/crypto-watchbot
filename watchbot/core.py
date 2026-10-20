@@ -380,3 +380,6 @@ def _evaluate_frames(a: Analysis, f: dict[str, pd.DataFrame], now: int,
 
 
 register_setup("trend-pullback", _evaluate_trend_pullback)
+
+from .setups import register_additional_setups as _register_additional_setups
+_register_additional_setups(register_setup)
