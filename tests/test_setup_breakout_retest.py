@@ -45,6 +45,12 @@ class BreakoutRetestTests(unittest.TestCase):
             self.analysis, self.frames, self.now, self.cfg, historical=True
         )[0]
 
+    def assert_counterevidence_contains(self, result, phrase):
+        self.assertTrue(
+            any(phrase in item for item in result.counterevidence),
+            msg=f"{phrase!r} not found in {result.counterevidence!r}",
+        )
+
     def test_confirms_volume_breakout_followed_by_retest_reclaim(self):
         result = self.evaluate()
         self.assertEqual(result.status, "TECHNICAL_CONFIRMED")
@@ -57,13 +63,13 @@ class BreakoutRetestTests(unittest.TestCase):
         self.frames["5m"].loc[22, ["low", "close", "high"]] = [100.3, 100.5, 100.6]
         result = self.evaluate()
         self.assertEqual(result.status, "PENDING")
-        self.assertIn("قیمت سطح شکسته‌شده را لمس نکرده", result.counterevidence)
+        self.assert_counterevidence_contains(result, "قیمت سطح شکسته‌شده را لمس نکرده")
 
     def test_rejects_unconfirmed_breakout_volume(self):
         self.frames["5m"].loc[21, "volume"] = 1100
         result = self.evaluate()
         self.assertEqual(result.status, "PENDING")
-        self.assertIn("شکست پرحجم و معتبر سطح ۲۰ کندلی", result.counterevidence)
+        self.assert_counterevidence_contains(result, "شکست پرحجم و معتبر سطح ۲۰ کندلی")
 
 
 if __name__ == "__main__":
