@@ -1,6 +1,8 @@
-# Validation status — 0.2.0 — 2026-10-20
+# Validation status — 0.3.0 — 2026-10-20
 
-- Python unit/integration tests: 41 passed (local environment).
+- Python unit/integration tests: 51 passed (local environment). Ten JavaScript model tests passed.
+- Dashboard checks cover read-only snapshots, immutable historical inputs, legacy rows, control queue and scanner acknowledgement, host/origin/session checks, observation-time replay boundaries, alert expiry/invalidation and evidence-grounded responses.
+- Browser-based visual QA was not performed in this build environment. Responsive layout and canvas interactions still need validation on a real target browser.
 - Python wheel packaging: successfully built locally with no dependency downloads.
 - Offline demo: generated four three-timeframe PNG charts with synthetic LONG and SHORT confirmation fixtures, Persian captions and JSON evidence.
 - Transport tests: mocked Binance OHLC responses, cache behavior, clock-skew rejection, Telegram multipart photo payload and secret-redacted HTTP errors.

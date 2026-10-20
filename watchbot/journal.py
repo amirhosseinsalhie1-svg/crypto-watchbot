@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 import json
 import sqlite3
+import zlib
+import math
 
 from .core import Analysis, Config, INTERVALS, iso, news_gate
 
@@ -39,6 +41,9 @@ class Journal:
                 sent_at INTEGER, last_error TEXT);
             CREATE TABLE IF NOT EXISTS events(
                 id INTEGER PRIMARY KEY, at INTEGER, kind TEXT, payload TEXT);
+            CREATE TABLE IF NOT EXISTS decision_evidence(
+                analysis_id INTEGER PRIMARY KEY REFERENCES analyses(id),
+                observed_at INTEGER NOT NULL, frames BLOB NOT NULL, risk TEXT NOT NULL);
         ''')
         existing = self.get("config_hash")
         if existing and existing != cfg.fingerprint():
@@ -97,6 +102,27 @@ class Journal:
         ident = a.signal_id or f"{a.symbol}:{a.asof}:{a.status}"
         self.db.execute("INSERT OR IGNORE INTO outbox(id,payload,photo,expires) VALUES(?,?,?,?)",
                         (ident, caption, photo, a.asof + INTERVALS["5m"]))
+
+    def capture_evidence(self, a: Analysis, frames: dict, observed_at: int):
+        """Immutable inputs known at this evaluation; legacy rows are not backfilled."""
+        columns = ["open_time", "open", "high", "low", "close", "volume", "close_time",
+                   "ema50", "tenkan", "kijun", "span_a", "span_b", "atr14"]
+        payload = {tf: [{key: (None if isinstance(value, float) and not math.isfinite(value) else value)
+                        for key, value in row.items()}
+                       for row in frame[[c for c in columns if c in frame]].to_dict(orient="records")]
+                   for tf, frame in frames.items()}
+        row = self.db.execute("SELECT id FROM analyses WHERE symbol=? AND asof=?", (a.symbol, a.asof)).fetchone()
+        risk = dict(self.summary(), paused=self.get("paused", False), paper_enabled=self.cfg.paper_enabled,
+                    day=self.get("day"), day_start_equity=self.get("day_start_equity", self.cfg.equity),
+                    daily_gross_losses=self.get("daily_gross_losses", 0),
+                    consecutive_losses=self.get("consecutive_losses", 0),
+                    daily_loss_fraction=self.cfg.daily_loss_fraction, risk_fraction=self.cfg.risk_fraction)
+        known = self.db.execute("SELECT id,exit_at FROM trades ORDER BY entry_at DESC LIMIT 500").fetchall()
+        risk["known_trade_ids"] = [row["id"] for row in known]
+        risk["known_closed_trade_ids"] = [row["id"] for row in known if row["exit_at"] is not None]
+        self.db.execute("INSERT OR IGNORE INTO decision_evidence VALUES(?,?,?,?)", (
+            row[0], int(observed_at), zlib.compress(json.dumps(payload, allow_nan=False).encode()),
+            json.dumps(risk, ensure_ascii=False, allow_nan=False)))
 
     def schedule(self, a: Analysis, *, ignore_news: bool = False):
         if not self.cfg.paper_enabled or a.status != "TECHNICAL_CONFIRMED":

@@ -22,6 +22,10 @@ def main(argv=None):
     d.add_argument("--output", default="runtime/demo")
     health = sub.add_parser("doctor", help="Read-only setup checks; never sends Telegram messages")
     health.add_argument("--live", action="store_true", help="Also probe current public market data")
+    ui = sub.add_parser("dashboard", help="Local evidence dashboard; reads the selected journal")
+    ui.add_argument("--port", type=int, default=8765)
+    bundle = sub.add_parser("dashboard-export", help="Export recorded evidence for the portable dashboard")
+    bundle.add_argument("--output", default="runtime/dashboard-snapshot.json")
     sub.add_parser("run", help="Continuous WebSocket + REST scanner")
     sub.add_parser("once", help="One live scan (sends alerts if Telegram is configured)")
     sub.add_parser("status", help="Read journal summary")
@@ -33,7 +37,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         cfg = Config.load(args.config)
-        if args.command == "doctor":
+        if args.command == "dashboard":
+            from .dashboard import serve
+            serve(cfg, args.port)
+            return 0
+        elif args.command == "dashboard-export":
+            from .dashboard import snapshot
+            path = Path(args.output)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(snapshot(cfg), ensure_ascii=False, allow_nan=False), encoding="utf8")
+            result = {"output": str(path.resolve())}
+        elif args.command == "doctor":
             result = doctor(cfg, live=args.live)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1
