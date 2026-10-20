@@ -49,7 +49,7 @@ class RangeBreakoutTests(unittest.TestCase):
         self.assertTrue(result.signal_id)
 
     def test_rejects_repeated_breakout_after_prior_close_left_range(self):
-        self.frames["5m"].loc[20, "close"] = 100.05
+        self.frames["5m"].loc[20, ["close", "high"]] = [100.05, 100.1]
         result = self.evaluate()
         self.assertEqual(result.status, "PENDING")
         self.assertIn("شکست تازهٔ سقف/کف ۲۰ کندل بسته‌شده تأیید نشده", result.counterevidence)
