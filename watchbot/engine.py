@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from contextlib import contextmanager
 import json
 from pathlib import Path
 import os
 
-from .core import Config, INTERVALS, analyze, utc_ms, validate_frame
+import pandas as pd
+
+from .core import (Config, INTERVALS, analyze, utc_ms, validate_frame, entry_window_open,
+                   indicators, _analysis_context, _evaluate_frames)
 from .diagnostics import validate_snapshot
+from .control import consume_controls
 from .io import BinanceReference, NetworkError, Telegram, load_csv
 from .journal import Journal
 from .render import caption, chart
@@ -43,16 +48,33 @@ def single_instance(database: str):
 class Engine:
     def __init__(self, cfg: Config):
         self.cfg, self.journal = cfg, Journal(cfg)
+        self._frame_cache = {}
+
+    def _prepare(self, symbol, tf, frame, now):
+        # Hash every input value, not just its timestamp: revised/corrupt bars must
+        # invalidate the cache. The UTC bucket prevents reuse of stale HTF data.
+        columns = ["open_time", "open", "high", "low", "close", "volume", "close_time"]
+        digest = hashlib.sha256(pd.util.hash_pandas_object(frame[columns], index=False).values.tobytes()).digest()
+        key = digest, now // INTERVALS[tf]
+        cached = self._frame_cache.get((symbol, tf))
+        if cached is not None and cached[0] == key:
+            return cached[1], cached[2]
+        raw = validate_frame(frame, tf, now, fresh=True,
+                             min_bars=250 if self.cfg.strategy_profile == "guarded-v1" else 200)
+        featured = indicators(raw)
+        self._frame_cache[symbol, tf] = key, raw, featured
+        return raw, featured
 
     def process(self, now: int, snapshots: dict, *, historical=False, ignore_news=False,
                 render_all=False, queue_alerts=True, render_signals=True):
         j, cfg = self.journal, self.cfg
-        prepared, reports = {}, []
+        prepared, features, reports = {}, {}, []
         for symbol, frames in snapshots.items():
             # Validate all timeframes before advancing any paper state for this symbol.
             try:
-                prepared[symbol] = {tf: validate_frame(frames[tf], tf, now, fresh=True)
-                                    for tf in INTERVALS}
+                pairs = {tf: self._prepare(symbol, tf, frames[tf], now) for tf in INTERVALS}
+                prepared[symbol] = {tf: pair[0] for tf, pair in pairs.items()}
+                features[symbol] = {tf: pair[1] for tf, pair in pairs.items()}
             except (KeyError, ValueError):
                 pass
         with j.transaction():
@@ -71,7 +93,11 @@ class Engine:
             for _, symbol, index in sorted(events):
                 j.advance(symbol, prepared[symbol]["5m"].loc[[index]], ignore_news=ignore_news)
             for symbol, frames in snapshots.items():
-                a, f = analyze(symbol, frames, now, cfg, historical=historical)
+                if symbol in features:
+                    a, f = _evaluate_frames(_analysis_context(symbol, now, cfg), features[symbol],
+                                            now, cfg, historical=historical)
+                else:
+                    a, f = analyze(symbol, frames, now, cfg, historical=historical)
                 if ignore_news:
                     a.news_status = "UNSCREENED_RESEARCH"
                     a.news_note = "Replay explicitly omits fundamental screening"
@@ -90,11 +116,12 @@ class Engine:
                         json.dumps(a.to_dict(), ensure_ascii=False, indent=2), encoding="utf8")
                     Path(photo).with_suffix(".txt").write_text(caption(a), encoding="utf8")
                     if (queue_alerts and a.status == "TECHNICAL_CONFIRMED"
-                            and not j.get("paused", False)):
+                            and entry_window_open(cfg, a.asof) and not j.get("paused", False)):
                         last = j.get(f"alert:{symbol}", 0)
                         if a.asof >= last + cfg.cooldown_bars * INTERVALS["5m"]:
                             j.enqueue(a, caption(a), photo)
                             j.put(f"alert:{symbol}", a.asof)
+                j.capture_evidence(a, f, now)
         return reports
 
 
@@ -116,6 +143,7 @@ async def run_live(cfg: Config, once=False):
             while True:
                 try:
                     # Commands commit before scan, so pause takes effect immediately.
+                    consume_controls(engine.journal, utc_ms())
                     try:
                         telegram.commands(engine.journal)
                         engine.journal.db.commit()

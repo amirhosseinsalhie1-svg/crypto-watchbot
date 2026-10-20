@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "kind": "watchbot-bounded-backtest",
+  "source": "binance-usdm-reference",
+  "start_inclusive": "2026-09-14T00:00:00+00:00",
+  "end_exclusive": "2026-09-21T00:00:00+00:00",
+  "news_policy": "UNSCREENED_RESEARCH",
+  "config": {
+    "symbols": [
+      "BTCUSDT",
+      "SOLUSDT"
+    ],
+    "source": "binance-usdm-reference",
+    "database": "runtime/backtest-september-2026/02-guards-24h/journal.sqlite3",
+    "output_dir": "runtime/backtest-september-2026/02-guards-24h/charts",
+    "news_file": "news.json",
+    "equity": 152.37,
+    "risk_fraction": 0.0025,
+    "daily_loss_fraction": 0.0075,
+    "fee_bps_per_side": 5.0,
+    "slippage_bps_per_side": 2.0,
+    "funding_bps_per_8h": 3.0,
+    "paper_enabled": true,
+    "reward_risk": 2,
+    "max_hold_bars": 48,
+    "cooldown_bars": 6,
+    "max_signal_age_seconds": 45,
+    "max_entry_gap_fraction": 0.003,
+    "min_stop_fraction": 0.001,
+    "max_stop_fraction": 0.03,
+    "poll_seconds": 15,
+    "history_bars": 300,
+    "max_paper_notional_multiple": 1.0,
+    "strategy_profile": "guarded-v1",
+    "entry_windows": [],
+    "session_timezone": "Asia/Tehran",
+    "tp1_close_fraction": 0,
+    "tp1_reward_risk": 1.5
+  },
+  "summary": {
+    "mode": "PAPER_ONLY",
+    "source": "binance-usdm-reference",
+    "config_hash": "2a0d36a35b72a5bd",
+    "closed_trades": 4,
+    "win_rate": 0.0,
+    "net_pnl_usdt": -1.4933811284527678,
+    "equity_usdt": 150.87661887154724,
+    "closed_trade_pnl_usdt": -1.493381128452739,
+    "expectancy_net_r_per_planned_risk": -0.9837247178546428,
+    "fees_usdt": 0.21378903650653303,
+    "funding_cost_estimate_usdt": 0.007477296521748889,
+    "profit_factor": 0.0,
+    "max_closed_equity_drawdown": 0.00980101810364753,
+    "open_positions": 0,
+    "pending": false,
+    "position_state": null,
+    "note": "Estimated costs, no mark-price liquidation model. No profitability conclusion."
+  },
+  "by_symbol": {
+    "SOLUSDT": {
+      "closed_trades": 4,
+      "wins": 0,
+      "net_pnl_usdt": -1.493381128452739
+    }
+  },
+  "status_counts": {
+    "NO_SETUP": 3409,
+    "PENDING": 618,
+    "TECHNICAL_CONFIRMED": 7
+  },
+  "max_consecutive_closed_losses": 4,
+  "final_marked_equity_usdt": 150.87661887154724,
+  "marked_net_return_pct": -0.980101810364753,
+  "max_5m_close_marked_drawdown_pct": 0.980101810364753,
+  "dataset_manifest_sha256": "fb2f4667ba576f05b249067ba7e5780b55cc23488dac1bd5f3d6bad1f59de0a2",
+  "execution": {
+    "entry": "next candle open with adverse slippage; excessive gaps cancel",
+    "intrabar": "existing stop first; after TP1, breakeven wins an ambiguous same-bar retest",
+    "funding": "fixed adverse cost estimate, not historical realized funding",
+    "open_at_end": "reported and marked; never silently discarded",
+    "session": "entry gate only; monitoring and exits run 24h"
+  },
+  "limitations": [
+    "Small historical research sample; not evidence of profitability",
+    "OHLC cannot reconstruct tick ordering or actual fills",
+    "Drawdown sampled at 5m closes; intrabar drawdown may be larger",
+    "Fees/slippage/funding estimated; no order book or liquidation model",
+    "No statistically reliable Sharpe reported for this short experiment"
+  ]
+}

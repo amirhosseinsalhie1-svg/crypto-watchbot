@@ -1,0 +1,78 @@
+[
+  {
+    "experiment": "01-classic-24h",
+    "closed_trades": 4,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "expectancy_net_r": -0.7551077278291042,
+    "final_marked_equity_usdt": 151.3944291450612,
+    "marked_net_return_pct": -0.6402643925568108,
+    "max_5m_close_marked_drawdown_pct": 0.9571369263430607,
+    "open_positions": 1,
+    "technical_confirmed": 36,
+    "by_symbol": {
+      "SOLUSDT": {
+        "closed_trades": 4,
+        "wins": 0,
+        "net_pnl_usdt": -1.1475962650205904
+      }
+    }
+  },
+  {
+    "experiment": "02-guards-24h",
+    "closed_trades": 4,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "expectancy_net_r": -0.9837247178546428,
+    "final_marked_equity_usdt": 150.87661887154724,
+    "marked_net_return_pct": -0.980101810364753,
+    "max_5m_close_marked_drawdown_pct": 0.980101810364753,
+    "open_positions": 0,
+    "technical_confirmed": 7,
+    "by_symbol": {
+      "SOLUSDT": {
+        "closed_trades": 4,
+        "wins": 0,
+        "net_pnl_usdt": -1.493381128452739
+      }
+    }
+  },
+  {
+    "experiment": "03-guards-staged-24h",
+    "closed_trades": 4,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "expectancy_net_r": -0.9837247178546428,
+    "final_marked_equity_usdt": 150.87661887154724,
+    "marked_net_return_pct": -0.980101810364753,
+    "max_5m_close_marked_drawdown_pct": 0.980101810364753,
+    "open_positions": 0,
+    "technical_confirmed": 7,
+    "by_symbol": {
+      "SOLUSDT": {
+        "closed_trades": 4,
+        "wins": 0,
+        "net_pnl_usdt": -1.493381128452739
+      }
+    }
+  },
+  {
+    "experiment": "04-guards-staged-session",
+    "closed_trades": 2,
+    "win_rate": 0.5,
+    "profit_factor": 1.3797363079147242,
+    "expectancy_net_r": 0.18898274309504964,
+    "final_marked_equity_usdt": 152.51269470227987,
+    "marked_net_return_pct": 0.09365012947422091,
+    "max_5m_close_marked_drawdown_pct": 0.33621203079938766,
+    "open_positions": 0,
+    "technical_confirmed": 7,
+    "by_symbol": {
+      "SOLUSDT": {
+        "closed_trades": 2,
+        "wins": 1,
+        "net_pnl_usdt": 0.14269470227985748
+      }
+    }
+  }
+]
