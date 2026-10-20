@@ -1,0 +1,84 @@
+name: bounded-research-backtest
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/dashboard-reference-and-setup-extensibility
+    paths:
+      - "watchbot/**"
+      - "config.trend-pullback.research.json"
+      - "config.range-breakout.json"
+      - "config.price-action-candlestick.json"
+      - "tests/test_setup_*.py"
+      - ".github/workflows/research-backtest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install .
+
+      - name: Download and verify bounded Binance USD-M history
+        run: >-
+          python -m watchbot
+          --config config.range-breakout.json
+          history
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --output runtime/research-data
+
+      - name: Run baseline trend-pullback
+        run: >-
+          python -m watchbot
+          --config config.trend-pullback.research.json
+          backtest
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --data runtime/research-data
+          --output runtime/reports/trend-pullback
+          --ignore-news-for-research
+
+      - name: Run range breakout with candle confirmation
+        run: >-
+          python -m watchbot
+          --config config.range-breakout.json
+          backtest
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --data runtime/research-data
+          --output runtime/reports/range-breakout
+          --ignore-news-for-research
+
+      - name: Run price-action candlestick setup
+        run: >-
+          python -m watchbot
+          --config config.price-action-candlestick.json
+          backtest
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --data runtime/research-data
+          --output runtime/reports/price-action-candlestick
+          --ignore-news-for-research
+
+      - name: Upload reports and ledgers
+        uses: actions/upload-artifact@v4
+        with:
+          name: three-setup-research-2026-09-01-to-09-08
+          path: runtime/reports/
+          if-no-files-found: error
+          retention-days: 30
