@@ -1,8 +1,8 @@
 export const LABELS={TECHNICAL_CONFIRMED:'تأییدشده',PENDING:'در انتظار محرک',NO_SETUP:'بدون ستاپ',BLOCKED_DATA:'دادهٔ ناکافی',BLOCKED_RISK:'ریسک نامعتبر',EXPIRED:'منقضی',INVALIDATED:'باطل‌شده'};
 export const timeOf=r=>r.observed_at??r.analysis.asof;
 export function validateSnapshot(d){
- if(!d||d.kind!=='watchbot-dashboard-snapshot'||d.schema_version!==1||!Array.isArray(d.records)||d.records.length>1000||!Array.isArray(d.symbols)||d.symbols.length>100)throw Error('فایل باید خروجی dashboard-export ربات باشد.');
- const ids=new Set();for(const r of d.records){if(!Number.isSafeInteger(r.id)||ids.has(r.id)||!r.analysis||typeof r.analysis.symbol!=='string'||!Number.isFinite(r.analysis.asof)||!(r.analysis.status in LABELS)||!Number.isFinite(timeOf(r)))throw Error('ساختار تصمیم‌های فایل معتبر نیست.');ids.add(r.id);
+ if(!d||d.kind!=='watchbot-dashboard-snapshot'||d.schema_version!==1||!Array.isArray(d.records)||d.records.length>1000||!Array.isArray(d.symbols)||d.symbols.length>100)throw Error('فایل باید خروجی dashboard-export ربات باشد');
+ const ids=new Set();for(const r of d.records){if(!Number.isSafeInteger(r.id)||ids.has(r.id)||!r.analysis||typeof r.analysis.symbol!=='string'||!Number.isFinite(r.analysis.asof)||!(r.analysis.status in LABELS)||!Number.isFinite(timeOf(r)))throw Error('ساختار تصمیم‌های فایل معتبر نیست');ids.add(r.id);
   for(const [tf,rows]of Object.entries(r.frames??{})){if(!['5m','4h','1d'].includes(tf)||!Array.isArray(rows)||rows.length>1000)throw Error('تاریخچهٔ نامعتبر');let last=-Infinity;for(const b of rows){if(!['open_time','close_time','open','high','low','close'].every(k=>Number.isFinite(b[k]))||b.open_time<=last||b.close_time>=timeOf(r)||b.high<Math.max(b.open,b.close,b.low)||b.low>Math.min(b.open,b.close,b.high))throw Error('کندل نامعتبر یا متعلق به آینده در فایل');last=b.open_time;}}
  }return d;
 }
@@ -25,13 +25,13 @@ export function lifecycle(record,records,cutoff){
  return cutoff>=end?'EXPIRED':'TECHNICAL_CONFIRMED';
 }
 export function answerQuestion(record,question){
- if(!record)return {text:'هنوز تصمیمی با شواهد ثبت‌شده برای پاسخ‌دادن وجود ندارد.',fields:[]};
+ if(!record)return {text:'هنوز تصمیمی با شواهد ثبت‌شده برای پاسخ‌دادن وجود ندارد',fields:[]};
  const a=record.analysis,q=question.trim(),base=`${a.symbol} · ${LABELS[a.status]??a.status}`;
  if(!q)return {text:'سؤالت را دربارهٔ تصمیم انتخاب‌شده بنویس',fields:[]};
  if(/فردا|پیش.?بینی|tomorrow|predict/i.test(q))return {text:'این بخش فقط شواهد تصمیم‌های ثبت‌شده را توضیح می‌دهد و قیمت آینده را پیش‌بینی نمی‌کند',fields:[]};
- if(/خبر|فاندامنتال|news/i.test(q))return {text:`وضعیت خبر در همان تصمیم: ${a.news_status} · ${a.news_note??''}\nمنابع ثبت‌شده: ${(a.news_evidence?.sources??[]).join('، ')||'منبعی ثبت نشده است.'}\nاین پاسخ خبر تازه‌ای جست‌وجو نمی‌کند.`,fields:['news_status','news_note','news_evidence']};
+ if(/خبر|فاندامنتال|news/i.test(q))return {text:`وضعیت خبر در همان تصمیم: ${a.news_status} · ${a.news_note??''}\nمنابع ثبت‌شده: ${(a.news_evidence?.sources??[]).join('، ')||'منبعی ثبت نشده'}\nاین پاسخ خبر تازه‌ای جست‌وجو نمی‌کند.`,fields:['news_status','news_note','news_evidence']};
  if(/ابطال|ضرر|stop/i.test(q))return {text:a.stop!=null?`حد ضرر سناریوی ${a.side}: ${a.stop} · ${a.counterevidence?.join('؛ ')??''}`:'برای این تصمیم حد ضرری ثبت نشده؛ ستاپ کامل نشده یا داده کافی نبوده',fields:['side','stop','counterevidence']};
- if(/هدف|سود|target/i.test(q))return {text:a.target!=null?`هدف فرضی ثبت‌شده ${a.target} و قیمت ورود ${a.entry} است · این اعداد اجرای واقعی معامله یا تضمین سود نیستند`:'برای این تصمیم هدف فرضی ثبت نشده است.',fields:['entry','target']};
+ if(/هدف|سود|target/i.test(q))return {text:a.target!=null?`هدف فرضی ثبت‌شده ${a.target} و قیمت ورود ${a.entry} است · این اعداد اجرای واقعی معامله یا تضمین سود نیستند`:'برای این تصمیم هدف فرضی ثبت نشده',fields:['entry','target']};
  if(/ریسک|سرمایه|زیان|موجودی/.test(q)){const k=record.risk;if(!k)return {text:'وضعیت ریسک هم‌زمان با این تصمیم در سوابق قدیمی ثبت نشده',fields:[]};return {text:`سرمایهٔ فرضی ثبت‌شده: ${k.equity_usdt} USDT. زیان تجمیعی روز: ${k.daily_gross_losses??0} USDT. معاملات باز: ${k.open_positions??0}. پایش ${k.paused?'متوقف':'فعال'} و معاملات فرضی ${k.paper_enabled?'روشن':'خاموش'} بوده‌اند.`,fields:['risk']};}
  if(/منبع|نسخه|زمان|داده/.test(q))return {text:`منبع: ${a.source}\nنسخهٔ قواعد: ${a.strategy}\nشناسهٔ تنظیمات: ${a.config_hash}\nزمان بازار: ${a.asof}\nزمان ثبت ارزیابی: ${record.observed_at??'ثبت نشده'}\nشواهد ورودی: ${record.evidence_status}`,fields:['source','strategy','config_hash','asof','observed_at','evidence_status']};
  if(/چرا|رد|تأیید|تایید|تایم|شرط|ستاپ|تحلیل|جهت|خلاصه|why/i.test(q))return {text:`${base}\nدلایل ثبت‌شده: ${(a.reasons??[]).join('؛ ')||'دلیلی ثبت نشده'}\nشواهد مخالف و ملاحظات: ${(a.counterevidence??[]).join('؛ ')||'موردی ثبت نشده'}\nخبر: ${a.news_status}. ${a.news_note??''}`,fields:['status','side','reasons','counterevidence','news_status']};
