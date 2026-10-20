@@ -17,7 +17,7 @@ permissions:
 jobs:
   portfolio-backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +40,7 @@ jobs:
           --config config.portfolio-research.json
           history
           --start 2026-09-01T00:00:00Z
-          --end 2026-09-08T00:00:00Z
+          --end 2026-10-01T00:00:00Z
           --output runtime/portfolio-data
 
       - name: Run bounded 10-symbol portfolio backtest
@@ -49,14 +49,14 @@ jobs:
           --config config.portfolio-research.json
           backtest
           --start 2026-09-01T00:00:00Z
-          --end 2026-09-08T00:00:00Z
+          --end 2026-10-01T00:00:00Z
           --data runtime/portfolio-data
           --output runtime/portfolio-report
           --ignore-news-for-research
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ten-symbol-portfolio-backtest-2026-09-01-to-09-08
+          name: ten-symbol-portfolio-backtest-2026-09
           path: |
             runtime/portfolio-report/report.json
             runtime/portfolio-report/equity.csv
