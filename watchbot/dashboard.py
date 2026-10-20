@@ -12,6 +12,7 @@ import zlib
 
 from .core import Config, utc_ms
 from .control import queue_control
+from .market import live_snapshot
 
 WEB = Path(__file__).with_name("web")
 
@@ -59,6 +60,7 @@ def snapshot(cfg: Config, limit: int = 240) -> dict:
             "consecutive_losses": meta.get("consecutive_losses", 0),
             "daily_loss_fraction": cfg.daily_loss_fraction, "risk_fraction": cfg.risk_fraction,
             "max_closed_equity_drawdown": meta.get("max_drawdown", 0),
+            "position_state": meta.get("position_state"),
             "pending": meta.get("pending") is not None,
             "open_positions": sum(t["exit_at"] is None for t in result["trades"])}
     result["health"]["status"] = "NO_HEARTBEAT"
@@ -108,9 +110,12 @@ def make_server(cfg: Config, port: int = 8765):
                     return self.send_json(200, {"token": token, "mode": "LOCAL"})
                 if path == "/api/snapshot":
                     return self.send_json(200, snapshot(cfg))
+                if path == "/api/market":
+                    return self.send_json(200, live_snapshot(cfg))
                 assets = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
                           "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript"),
                           "/model.js": ("model.js", "text/javascript")}
+                assets["/market-model.js"] = ("market-model.js", "text/javascript")
                 if path in assets:
                     name, mime = assets[path]
                     return self.send_bytes(200, (WEB / name).read_bytes(), mime + "; charset=utf-8")

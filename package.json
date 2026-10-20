@@ -1,1 +1,8 @@
-{"name":"watchbot-evidence-ui","private":true,"type":"module","scripts":{"test":"node --test tests/test_dashboard_model.mjs"}}
+{
+  "name": "watchbot-evidence-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.mjs"
+  }
+}

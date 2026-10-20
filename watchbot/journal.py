@@ -9,7 +9,7 @@ import sqlite3
 import zlib
 import math
 
-from .core import Analysis, Config, INTERVALS, iso, news_gate
+from .core import Analysis, Config, INTERVALS, iso, news_gate, entry_window_open
 
 
 def trading_day(ms: int) -> str:
@@ -44,6 +44,10 @@ class Journal:
             CREATE TABLE IF NOT EXISTS decision_evidence(
                 analysis_id INTEGER PRIMARY KEY REFERENCES analyses(id),
                 observed_at INTEGER NOT NULL, frames BLOB NOT NULL, risk TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS trade_fills(
+                id INTEGER PRIMARY KEY, trade_id TEXT, at INTEGER, qty REAL,
+                price REAL, fees REAL, funding REAL, pnl REAL, reason TEXT);
+            CREATE TABLE IF NOT EXISTS trade_risk(trade_id TEXT PRIMARY KEY, planned_usdt REAL);
         ''')
         existing = self.get("config_hash")
         if existing and existing != cfg.fingerprint():
@@ -106,7 +110,8 @@ class Journal:
     def capture_evidence(self, a: Analysis, frames: dict, observed_at: int):
         """Immutable inputs known at this evaluation; legacy rows are not backfilled."""
         columns = ["open_time", "open", "high", "low", "close", "volume", "close_time",
-                   "ema50", "tenkan", "kijun", "span_a", "span_b", "atr14"]
+                   "ema50", "tenkan", "kijun", "span_a", "span_b", "atr14",
+                   "body_ratio", "prior_volume20", "prior_high26", "prior_low26"]
         payload = {tf: [{key: (None if isinstance(value, float) and not math.isfinite(value) else value)
                         for key, value in row.items()}
                        for row in frame[[c for c in columns if c in frame]].to_dict(orient="records")]
@@ -126,6 +131,9 @@ class Journal:
 
     def schedule(self, a: Analysis, *, ignore_news: bool = False):
         if not self.cfg.paper_enabled or a.status != "TECHNICAL_CONFIRMED":
+            return
+        if not entry_window_open(self.cfg, a.asof):
+            self.event(a.asof, "PAPER_SESSION_BLOCK", {"id": a.signal_id})
             return
         if not ignore_news and a.news_status != "CLEAR_REVIEWED":
             return
@@ -160,7 +168,8 @@ class Journal:
             if pending and pending["symbol"] == symbol and at == pending["asof"]:
                 gate, _ = news_gate(self.cfg.news_file, symbol, at)
                 self.put("pending", None)
-                if (ignore_news or gate == "CLEAR_REVIEWED") and self.eligible(at):
+                if (not self.get("paused", False) and entry_window_open(self.cfg, at)
+                        and (ignore_news or gate == "CLEAR_REVIEWED") and self.eligible(at)):
                     self._open(pending, row)
                 else:
                     self.event(at, "PAPER_BLOCKED", {"news": gate})
@@ -196,61 +205,100 @@ class Journal:
                            VALUES(?,?,?,?,?,?,?,?,?)''',
                         (p["signal_id"], p["symbol"], p["side"], p["asof"],
                          int(row.open_time), entry, stop, target, qty))
+        self.db.execute("INSERT INTO trade_risk VALUES(?,?)", (p["signal_id"], qty * unit_risk))
+        self.put("position_state", {"id": p["signal_id"], "remaining_qty": qty,
+                 "current_stop": stop, "tp1": entry + direction * cfg.tp1_reward_risk * distance,
+                 "tp1_done": False, "realized_pnl": 0})
         self.event(int(row.open_time), "PAPER_OPEN", {"id": p["signal_id"], "qty": qty})
 
     def _mark(self, p, row):
         direction = 1 if p["side"] == "LONG" else -1
-        stop_hit = row.low <= p["stop"] if direction == 1 else row.high >= p["stop"]
+        state = self.get("position_state")
+        if not state or state["id"] != p["id"]:
+            state = {"id": p["id"], "remaining_qty": p["qty"], "current_stop": p["stop"],
+                     "tp1_done": False, "realized_pnl": 0,
+                     "tp1": p["entry"] + direction * self.cfg.tp1_reward_risk * abs(p["entry"] - p["stop"])}
+        stop_hit = row.low <= state["current_stop"] if direction == 1 else row.high >= state["current_stop"]
         target_hit = row.high >= p["target"] if direction == 1 else row.low <= p["target"]
         count = p["bars"] + 1
         self.db.execute("UPDATE trades SET bars=? WHERE id=?", (count, p["id"]))
         if stop_hit:
             # Stop wins if both were touched; a gap through stop fills at worse open.
-            raw_exit = min(row.open, p["stop"]) if direction == 1 else max(row.open, p["stop"])
-            reason = "STOP_AMBIGUOUS" if target_hit else "STOP"
-        elif target_hit:
-            raw_exit, reason = p["target"], "TARGET"
-        elif count >= self.cfg.max_hold_bars:
-            raw_exit, reason = row.close, "TIMEOUT"
-        else:
+            raw_exit = min(row.open, state["current_stop"]) if direction == 1 else max(row.open, state["current_stop"])
+            reason = "BE_STOP" if state["tp1_done"] else "STOP_AMBIGUOUS" if target_hit else "STOP"
+            self._fill(p, row, state, state["remaining_qty"], raw_exit, reason, final=True)
             return
+        tp1_hit = row.high >= state["tp1"] if direction == 1 else row.low <= state["tp1"]
+        if self.cfg.tp1_close_fraction > 0 and not state["tp1_done"] and tp1_hit:
+            self._fill(p, row, state, p["qty"] * self.cfg.tp1_close_fraction, state["tp1"], "TP1", final=False)
+            state["tp1_done"], state["current_stop"] = True, p["entry"]
+            # OHLC cannot reveal ordering. Conservatively assume the new stop was hit
+            # after TP1 if both are in range; report this ambiguity explicitly.
+            be_hit = row.low <= p["entry"] if direction == 1 else row.high >= p["entry"]
+            if be_hit:
+                self._fill(p, row, state, state["remaining_qty"], p["entry"], "BE_AMBIGUOUS_AFTER_TP1", final=True)
+                return
+        if target_hit:
+            self._fill(p, row, state, state["remaining_qty"], p["target"], "TARGET", final=True)
+        elif count >= self.cfg.max_hold_bars:
+            self._fill(p, row, state, state["remaining_qty"], row.close, "TIMEOUT", final=True)
+        else:
+            self.put("position_state", state)
+
+    def _fill(self, p, row, state, qty, raw_exit, reason, *, final):
+        direction = 1 if p["side"] == "LONG" else -1
         exit_price = raw_exit * (1 - direction * self.cfg.slippage_bps_per_side / 10_000)
         # Conservatively charge elapsed time to candle close, even for intrabar exits.
         held_ms = int(row.close_time) + 1 - p["entry_at"]
-        funding = p["entry"] * p["qty"] * self.cfg.funding_bps_per_8h / 10_000 * held_ms / 28_800_000
-        fees = (p["entry"] + exit_price) * p["qty"] * self.cfg.fee_bps_per_side / 10_000
-        pnl = direction * (exit_price - p["entry"]) * p["qty"] - fees - funding
-        self.db.execute("UPDATE trades SET exit_at=?,exit=?,pnl=?,reason=? WHERE id=?",
-                        (int(row.close_time) + 1, exit_price, pnl, reason, p["id"]))
+        funding = p["entry"] * qty * self.cfg.funding_bps_per_8h / 10_000 * held_ms / 28_800_000
+        fees = (p["entry"] + exit_price) * qty * self.cfg.fee_bps_per_side / 10_000
+        pnl = direction * (exit_price - p["entry"]) * qty - fees - funding
+        at = int(row.close_time) + 1
+        self.db.execute("INSERT INTO trade_fills(trade_id,at,qty,price,fees,funding,pnl,reason) VALUES(?,?,?,?,?,?,?,?)",
+                        (p["id"], at, qty, exit_price, fees, funding, pnl, reason))
+        state["realized_pnl"] += pnl
+        state["remaining_qty"] = max(0, state["remaining_qty"] - qty)
+        if final:
+            self.db.execute("UPDATE trades SET exit_at=?,exit=?,pnl=?,reason=? WHERE id=?",
+                            (at, exit_price, state["realized_pnl"], reason, p["id"]))
         self.day(int(row.close_time) + 1)
         equity = self.get("equity") + pnl
         self.put("equity", equity)
         peak = max(self.get("peak_equity"), equity)
         self.put("peak_equity", peak)
         self.put("max_drawdown", max(self.get("max_drawdown"), 1 - equity / peak))
-        self.put("consecutive_losses", self.get("consecutive_losses", 0) + 1 if pnl < 0 else 0)
+        if final:
+            self.put("consecutive_losses", self.get("consecutive_losses", 0) + 1 if state["realized_pnl"] < 0 else 0)
         self.put("daily_gross_losses", self.get("daily_gross_losses", 0) + max(0, -pnl))
-        self.event(int(row.close_time) + 1, "PAPER_CLOSED", {"id": p["id"], "pnl": pnl, "reason": reason})
+        self.put("position_state", None if final else state)
+        self.event(at, "PAPER_CLOSED" if final else "PAPER_PARTIAL", {"id": p["id"], "pnl": pnl, "reason": reason})
 
     def summary(self):
         closed = self.db.execute("SELECT pnl FROM trades WHERE exit_at IS NOT NULL").fetchall()
         vals = [r[0] for r in closed]
         win, loss = sum(v for v in vals if v > 0), -sum(v for v in vals if v < 0)
+        multiples = [r[0] for r in self.db.execute('''SELECT t.pnl/r.planned_usdt FROM trades t
+                     JOIN trade_risk r ON r.trade_id=t.id WHERE t.exit_at IS NOT NULL AND r.planned_usdt>0''')]
+        cost = self.db.execute("SELECT COALESCE(SUM(fees),0), COALESCE(SUM(funding),0) FROM trade_fills").fetchone()
         return {"mode": "PAPER_ONLY", "source": self.cfg.source,
                 "config_hash": self.cfg.fingerprint(), "closed_trades": len(vals),
                 "win_rate": sum(v > 0 for v in vals) / len(vals) if vals else None,
-                "net_pnl_usdt": sum(vals), "equity_usdt": self.get("equity"),
+                "net_pnl_usdt": self.get("equity") - self.cfg.equity, "equity_usdt": self.get("equity"),
+                "closed_trade_pnl_usdt": sum(vals),
+                "expectancy_net_r_per_planned_risk": sum(multiples) / len(multiples) if multiples else None,
+                "fees_usdt": cost[0], "funding_cost_estimate_usdt": cost[1],
                 "profit_factor": win / loss if loss else None,
                 "max_closed_equity_drawdown": self.get("max_drawdown"),
                 "open_positions": self.db.execute("SELECT COUNT(*) FROM trades WHERE exit_at IS NULL").fetchone()[0],
                 "pending": self.get("pending") is not None,
+                "position_state": self.get("position_state"),
                 "note": "Estimated costs, no mark-price liquidation model. No profitability conclusion."}
 
     def export(self, directory: str):
         import csv
         folder = Path(directory)
         folder.mkdir(parents=True, exist_ok=True)
-        for table in ["trades", "analyses", "events", "outbox"]:
+        for table in ["trades", "trade_fills", "trade_risk", "analyses", "events", "outbox"]:
             cursor = self.db.execute(f"SELECT * FROM {table}")
             with (folder / f"{table}.csv").open("w", newline="", encoding="utf-8-sig") as out:
                 writer = csv.writer(out)

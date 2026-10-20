@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from .core import Config
+from .core import Config, parse_time
 from .demo import demo
 from .diagnostics import doctor
 from .engine import Engine, replay, run_live, single_instance
@@ -27,6 +27,7 @@ def main(argv=None):
     bundle = sub.add_parser("dashboard-export", help="Export recorded evidence for the portable dashboard")
     bundle.add_argument("--output", default="runtime/dashboard-snapshot.json")
     sub.add_parser("run", help="Continuous WebSocket + REST scanner")
+    sub.add_parser("market-feed", help="Read-only WebSocket chart feed; no REST bootstrap, analysis or Telegram")
     sub.add_parser("once", help="One live scan (sends alerts if Telegram is configured)")
     sub.add_parser("status", help="Read journal summary")
     e = sub.add_parser("export", help="Export journal CSVs and summary")
@@ -34,10 +35,27 @@ def main(argv=None):
     r = sub.add_parser("replay", help="Walk-forward research over CSV files; no Telegram")
     r.add_argument("--data", required=True)
     r.add_argument("--ignore-news-for-research", action="store_true")
+    history = sub.add_parser("history", help="Download and checksum-verify official Binance USD-M archives")
+    history.add_argument("--start", required=True)
+    history.add_argument("--end", required=True)
+    history.add_argument("--output", required=True)
+    bt = sub.add_parser("backtest", help="Limited walk-forward backtest over verified archive CSVs")
+    bt.add_argument("--start", required=True)
+    bt.add_argument("--end", required=True)
+    bt.add_argument("--data", required=True)
+    bt.add_argument("--output", required=True)
+    bt.add_argument("--ignore-news-for-research", action="store_true")
     args = parser.parse_args(argv)
     try:
         cfg = Config.load(args.config)
-        if args.command == "dashboard":
+        if args.command == "history":
+            from .archive import download_history
+            result = download_history(cfg, parse_time(args.start), parse_time(args.end), args.output)
+        elif args.command == "backtest":
+            from .backtest import run_backtest
+            result = run_backtest(cfg, args.data, parse_time(args.start), parse_time(args.end), args.output,
+                                  ignore_news=args.ignore_news_for_research, progress=True)
+        elif args.command == "dashboard":
             from .dashboard import serve
             serve(cfg, args.port)
             return 0
@@ -53,6 +71,14 @@ def main(argv=None):
             return 0 if result["ok"] else 1
         elif args.command == "demo":
             result = demo(cfg, args.output)
+        elif args.command == "market-feed":
+            from .io import BinanceReference
+            if cfg.source != "binance-usdm-reference":
+                raise ValueError("Live chart provider is Binance USD-M reference only")
+            with single_instance(cfg.database):
+                print("PRICE DISPLAY ONLY | no setup evaluation, paper fills, Telegram or orders", flush=True)
+                asyncio.run(BinanceReference(cfg).listen(cfg.symbols, asyncio.Event()))
+            return 0
         elif args.command in ("run", "once"):
             asyncio.run(run_live(cfg, once=args.command == "once"))
             return 0

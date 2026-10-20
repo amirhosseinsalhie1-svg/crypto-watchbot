@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "source": "binance-usdm-reference",
+  "downloaded_at": "2026-10-20T15:34:41.595000+00:00",
+  "start_inclusive": "2026-09-14T00:00:00+00:00",
+  "end_exclusive": "2026-09-21T00:00:00+00:00",
+  "warmup_bars": 300,
+  "archives": [
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2026-09.zip",
+      "sha256": "3a2d163a2bd28ca614fa0840a92ecbcde0d9c4962b278dd619d5bf81a9918e26",
+      "bytes": 389713
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/4h/BTCUSDT-4h-2026-07.zip",
+      "sha256": "2fff352c045efe78b52785b2dc6d6107ce63c435c5eec9e28f2c247e110afde0",
+      "bytes": 10453
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/4h/BTCUSDT-4h-2026-08.zip",
+      "sha256": "49dce8e4d82b20a288632c245a267ca5715f53ef170ac62915aa00a75491c3aa",
+      "bytes": 10424
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/4h/BTCUSDT-4h-2026-09.zip",
+      "sha256": "0c34fc07983af9550f4e630c30aac040b288fea22e0572ed06fb44b114cb52e4",
+      "bytes": 10146
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2025-11.zip",
+      "sha256": "606b497e9d4ad7b67d2c44482c4a8c136f528a82b4585b1f1a0ecc79a4989165",
+      "bytes": 2076
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2025-12.zip",
+      "sha256": "40484d66317a3c7c73e438f8243faf23e041863debdb9e4f523b00156f9dd8d2",
+      "bytes": 2123
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-01.zip",
+      "sha256": "6ea7e8767031806d4ecc17581af562e49f4f223b7db45cbb4e44c078f4f39635",
+      "bytes": 2111
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-02.zip",
+      "sha256": "dc4ac6372ec3684e39887b4fd9f9b005da82b285badf56b28ebcc5455590fe37",
+      "bytes": 1961
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-03.zip",
+      "sha256": "6e6f14c60e723f9c9d1e87d00df0553e6f2e8813c67154101884e1d93e017e48",
+      "bytes": 2130
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-04.zip",
+      "sha256": "3860febfca089675b86fd50df54a2da0a7980de1331e5b42e1df0210240ae12d",
+      "bytes": 2049
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-05.zip",
+      "sha256": "91d2e45e3bb4994c849ac56a089da18575b4d01ba1a9f4cff5d3fbbc27b7e9cc",
+      "bytes": 2106
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-06.zip",
+      "sha256": "916bc1d543aceb81184584da93d202cccaab5e21eb4e789996af35e6846de668",
+      "bytes": 2068
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-07.zip",
+      "sha256": "c8aa635aee3c6fdc48347adc975b60c2342ef4253f4269494f9e08e85be61480",
+      "bytes": 2111
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-08.zip",
+      "sha256": "0c7a739c1eae50cb60a31cedb4cb59b14b3a806523f044e9e8abbdf5e2a4512b",
+      "bytes": 2115
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-09.zip",
+      "sha256": "34ec2bc722aea637ded6df5b2f9a71c17396ca8e010019f4711defb81c14a589",
+      "bytes": 2066
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/5m/SOLUSDT-5m-2026-09.zip",
+      "sha256": "9b71841a30ba4e98cab7c3591240dcfccba0efde6889785b586f9af1e84079fe",
+      "bytes": 368743
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-07.zip",
+      "sha256": "fc436f45c3ba75a7d745a63fe4bd4407fa836b1fe23b259446f974a3fa226178",
+      "bytes": 9768
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-08.zip",
+      "sha256": "2a3c12136604a81e7b58bc84fc0b984a2bc32f8031867474ca60cdec8a26aa85",
+      "bytes": 9902
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-09.zip",
+      "sha256": "809d1f883d4416fb38a255263a924b88e6daa84b568bd8087c48be23956fef24",
+      "bytes": 9754
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2025-11.zip",
+      "sha256": "ac75b047f609fefa9f7d115ce50aa98835f7d856d119ed453fe4d1f87c1a58f9",
+      "bytes": 2054
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2025-12.zip",
+      "sha256": "ef927b949c0eac27b2b5a7b2b8874891cf5e5b8e6508ba47ed9903311a7191d9",
+      "bytes": 2080
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-01.zip",
+      "sha256": "69be2e5619118974cc61dd50f4cd4f9ae776673c9af278a26579a5916276f446",
+      "bytes": 2078
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-02.zip",
+      "sha256": "334fe09bc64e00684e067346fd343974b4bdebe4d61c38e1283998a9d9748bc7",
+      "bytes": 1899
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-03.zip",
+      "sha256": "dc8c11c03b914e7839599c4fba9299a31b429040b152424be491c301b3a6e242",
+      "bytes": 2054
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-04.zip",
+      "sha256": "05d60595e4e4d12172849a6bde4af65334ea2941b773fd805790c75862137db1",
+      "bytes": 1967
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-05.zip",
+      "sha256": "b16eca8b0b73c72ab46a86fb611406d9a175d5f2e89aae2b029832d0eaf104b7",
+      "bytes": 2024
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-06.zip",
+      "sha256": "47d6fcfde2816d105116c6d6b16f3f87be10edf904f9b020ab54348152098a61",
+      "bytes": 1997
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-07.zip",
+      "sha256": "3fcb32f964b330e9c3b52bc34e38fc7842aa63b8a6f9537e933bc47bee7aebcc",
+      "bytes": 2002
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-08.zip",
+      "sha256": "5b26cf25c7c7395e8d10a494378948229f66443f84a178a38859a10a94cfe4e4",
+      "bytes": 2027
+    },
+    {
+      "url": "https://data.binance.vision/data/futures/um/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2026-09.zip",
+      "sha256": "42ec43a6d1c2763012f9f7134040903681a34a77621dbc602da2836fec8c1017",
+      "bytes": 1999
+    }
+  ],
+  "files": [
+    {
+      "name": "BTCUSDT_5m.csv",
+      "sha256": "ac751066e2bb720b5cccad4c6b0f782e47768d3146b99da60844d2ed83c1fe8b",
+      "rows": 2318,
+      "first_open": "2026-09-12T22:50:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    },
+    {
+      "name": "BTCUSDT_4h.csv",
+      "sha256": "0b95b6b96ce3071088394282d6a21b08d6d1a90b1097f1292c936a456a8aad1d",
+      "rows": 344,
+      "first_open": "2026-07-25T16:00:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    },
+    {
+      "name": "BTCUSDT_1d.csv",
+      "sha256": "4cc2e4c6ccb3de27ff7c635ea88ae260dcafb50e36ecf0b47cc9535776403437",
+      "rows": 309,
+      "first_open": "2025-11-16T00:00:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    },
+    {
+      "name": "SOLUSDT_5m.csv",
+      "sha256": "7f67073ea17a5371ef633e4857b181196f57d3e93f6a80c986501ba0140fbb2c",
+      "rows": 2318,
+      "first_open": "2026-09-12T22:50:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    },
+    {
+      "name": "SOLUSDT_4h.csv",
+      "sha256": "76f5b9e37d07f8f571537273a5423bcb5be30124b9ac62142166a72f1f8bb860",
+      "rows": 344,
+      "first_open": "2026-07-25T16:00:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    },
+    {
+      "name": "SOLUSDT_1d.csv",
+      "sha256": "abd707556a0cb6a4b467c81fd02006f6bd1dc0864453f7b0aec58a079d2f137a",
+      "rows": 309,
+      "first_open": "2025-11-16T00:00:00+00:00",
+      "last_close": "2026-09-21T00:00:00+00:00"
+    }
+  ]
+}

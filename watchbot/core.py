@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import hashlib
 import json
 import math
@@ -13,6 +14,7 @@ import pandas as pd
 
 INTERVALS = {"5m": 300_000, "4h": 14_400_000, "1d": 86_400_000}
 VERSION = "pa-ichimoku-ema-v0.1"
+GUARDED_VERSION = "pa-ichimoku-ema-guards-v0.2"
 
 
 def utc_ms() -> int:
@@ -54,6 +56,11 @@ class Config:
     poll_seconds: int = 15
     history_bars: int = 300
     max_paper_notional_multiple: float = 1
+    strategy_profile: str = "classic"
+    entry_windows: tuple[str, ...] = ()
+    session_timezone: str = "Asia/Tehran"
+    tp1_close_fraction: float = 0
+    tp1_reward_risk: float = 1.5
 
     def __post_init__(self):
         if not self.symbols or len(set(self.symbols)) != len(self.symbols):
@@ -85,16 +92,54 @@ class Config:
         if not (1 <= self.max_hold_bars <= 288 and self.cooldown_bars >= 1
                 and 1 <= self.max_signal_age_seconds <= 120):
             raise ValueError("Invalid lifecycle settings")
+        if self.strategy_profile not in {"classic", "guarded-v1"}:
+            raise ValueError("Unknown strategy profile")
+        if (not 0 <= self.tp1_close_fraction < 1 or self.tp1_reward_risk <= 0
+                or self.tp1_close_fraction > 0 and self.tp1_reward_risk >= self.reward_risk):
+            raise ValueError("Invalid partial target settings")
+        try:
+            ZoneInfo(self.session_timezone)
+        except (ZoneInfoNotFoundError, ValueError, TypeError):
+            raise ValueError("Invalid session timezone") from None
+        if not isinstance(self.entry_windows, (tuple, list)):
+            raise ValueError("entry_windows must be a list of HH:MM-HH:MM windows")
+        for window in self.entry_windows:
+            if not isinstance(window, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d", window):
+                raise ValueError("Invalid entry window; use HH:MM-HH:MM")
+            if window[:5] == window[6:]:
+                raise ValueError("Equal window boundaries are ambiguous; use [] for 24h")
 
     @classmethod
     def load(cls, path: str) -> "Config":
         raw = json.loads(Path(path).read_text(encoding="utf8"))
         if "symbols" in raw:
             raw["symbols"] = tuple(raw["symbols"])
+        if "entry_windows" in raw:
+            raw["entry_windows"] = tuple(raw["entry_windows"])
         return cls(**raw)
 
     def fingerprint(self) -> str:
-        return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()[:16]
+        payload = asdict(self)
+        # Preserve existing experiment identities when all extension defaults apply.
+        for key, default in {"strategy_profile": "classic", "entry_windows": (),
+                             "session_timezone": "Asia/Tehran", "tp1_close_fraction": 0,
+                             "tp1_reward_risk": 1.5}.items():
+            if payload[key] == default or key == "entry_windows" and not payload[key]:
+                payload.pop(key)
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def entry_window_open(cfg: Config, at: int) -> bool:
+    """Gate new entries only. Existing stops/targets are managed at all times."""
+    if not cfg.entry_windows:
+        return True
+    clock = datetime.fromtimestamp(at / 1000, timezone.utc).astimezone(ZoneInfo(cfg.session_timezone))
+    minute = clock.hour * 60 + clock.minute
+    for window in cfg.entry_windows:
+        start, end = (int(t[:2]) * 60 + int(t[3:]) for t in window.split("-"))
+        if (start <= minute < end if start < end else minute >= start or minute < end):
+            return True
+    return False
 
 
 def validate_frame(df: pd.DataFrame, interval: str, cutoff: int,
@@ -146,6 +191,11 @@ def indicators(df: pd.DataFrame) -> pd.DataFrame:
     tr = pd.concat([d.high - d.low, (d.high - d.close.shift()).abs(),
                     (d.low - d.close.shift()).abs()], axis=1).max(axis=1)
     d["atr14"] = tr.rolling(14).mean()  # simple TR mean, explicitly not Wilder ATR
+    d["body_ratio"] = (d.close - d.open).abs() / (d.high - d.low).replace(0, np.nan)
+    # Confirmation uses the preceding 20 finalized volumes, excluding the signal bar.
+    d["prior_volume20"] = d.volume.shift(1).rolling(20).mean()
+    d["prior_high26"] = d.high.shift(26)
+    d["prior_low26"] = d.low.shift(26)
     return d
 
 
@@ -191,16 +241,18 @@ class Analysis:
     strategy: str = VERSION
     config_hash: str = ""
     news_evidence: dict = field(default_factory=dict)
+    entry_session: str = "OPEN"
 
     def to_dict(self):
         return asdict(self)
 
 
-def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
-            cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
+def _analysis_context(symbol: str, now: int, cfg: Config) -> Analysis:
     news, note = news_gate(cfg.news_file, symbol, now)
     a = Analysis(symbol, cfg.source, now, "BLOCKED_DATA", None, [], [], news, note,
                  config_hash=cfg.fingerprint())
+    a.strategy = GUARDED_VERSION if cfg.strategy_profile == "guarded-v1" else VERSION
+    a.entry_session = "OPEN" if entry_window_open(cfg, now) else "MONITOR_ONLY"
     try:
         raw_news = Path(cfg.news_file).read_bytes()
         parsed_news = json.loads(raw_news)
@@ -210,12 +262,26 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
                            "sources": parsed_news.get("sources", [])}
     except (OSError, ValueError, AttributeError):
         pass
+    return a
+
+
+def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
+            cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
+    a = _analysis_context(symbol, now, cfg)
     try:
-        f = {tf: indicators(validate_frame(frames[tf], tf, now, fresh=True))
+        f = {tf: indicators(validate_frame(frames[tf], tf, now, fresh=True,
+                                          min_bars=250 if cfg.strategy_profile == "guarded-v1" else 200))
              for tf in INTERVALS}
     except (ValueError, KeyError) as exc:
         a.reasons = [str(exc)]
         return a, {}
+    return _evaluate_frames(a, f, now, cfg, historical=historical)
+
+
+def _evaluate_frames(a: Analysis, f: dict[str, pd.DataFrame], now: int,
+                     cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
+    """Internal evaluator. Caller must validate every frame and cutoff first."""
+    symbol = a.symbol
     daily, h4, m5 = (f[t].iloc[-1] for t in ["1d", "4h", "5m"])
     a.asof = int(m5.close_time) + 1
     if not historical and now - a.asof > cfg.max_signal_age_seconds * 1000:
@@ -249,6 +315,19 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
     if not trigger:
         a.counterevidence = ["پولبک به EMA و شکست ساختار سه کندل قبل در ۵دقیقه تأیید نشده"]
         return a, f
+    if cfg.strategy_profile == "guarded-v1":
+        checks = {
+            "بدنهٔ کندل کمتر از ۶۰٪ دامنه است": m5.body_ratio >= .60,
+            "حجم کمتر از ۱٫۲ برابر میانگین ۲۰ کندل قبلی است": m5.volume >= 1.2 * m5.prior_volume20,
+            "فاصلهٔ قیمت تا EMA بیشتر از ۲٫۵ ATR است": abs(m5.close - m5.ema50) <= 2.5 * m5.atr14,
+            "تأیید قیمت نسبت به سقف/کف ۲۶ کندل قبل کامل نیست":
+                m5.close > m5.prior_high26 if direction == 1 else m5.close < m5.prior_low26,
+        }
+        failed = [reason for reason, passed in checks.items() if not passed]
+        if failed:
+            a.counterevidence = failed
+            return a, f
+        a.reasons.append("چهار فیلتر بدنه، حجم قبلی، فاصلهٔ ATR و تأیید ۲۶ کندل قبل برقرارند")
     stop = ((min(prev.low.min(), m5.low) - .1 * m5.atr14) if direction == 1 else
             (max(prev.high.max(), m5.high) + .1 * m5.atr14))
     entry = float(m5.close)
@@ -262,6 +341,8 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
     a.status = "TECHNICAL_CONFIRMED"
     a.reasons.append("پولبک و شکست سه کندل قبل با کندل بسته‌شده ۵دقیقه تأیید شد")
     a.counterevidence = ["شکست کاذب و تغییر روند ممکن است؛ این قواعد هنوز اثبات سودآوری ندارند"]
-    key = f"{VERSION}:{cfg.fingerprint()}:{cfg.source}:{symbol}:{a.asof}:{a.side}"
+    if a.entry_session == "MONITOR_ONLY":
+        a.counterevidence.append("خارج از ساعت مجاز ورود؛ تحلیل ثبت می‌شود و موقعیت باز پیگیری می‌شود")
+    key = f"{a.strategy}:{cfg.fingerprint()}:{cfg.source}:{symbol}:{a.asof}:{a.side}"
     a.signal_id = hashlib.sha256(key.encode()).hexdigest()[:24]
     return a, f

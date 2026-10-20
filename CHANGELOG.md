@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-10-20
+
+- Preserve classic rules and add an optional, versioned four-filter research profile inspired by the reviewed Gemini draft.
+- Add timezone-aware entry windows; monitoring and exits continue outside entry hours.
+- Add optional staged exits, conservative same-bar breakeven handling, an exact fill/cost ledger and planned-risk metrics.
+- Add official checksum-verified USD-M archive downloads and bounded, reproducible backtests with initial-capital and marked-equity drawdowns. Report open positions at the end.
+- Add an isolated live chart display cache, freshness checks and a quote-only WebSocket command. Unfinished bars cannot enter recorded decisions or replay.
+- Cache unchanged validated frames using all input values and UTC boundaries. Keep default configuration fingerprints backward-compatible.
+- No exchange order execution or account connection is introduced.
+
 ## 0.3.0 — 2026-10-20
 
 - Add a Persian evidence dashboard with a numeric candle chart, timeframe selection, alert status, decision replay, risk/health views and journal-grounded answers.

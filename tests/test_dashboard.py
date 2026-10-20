@@ -121,7 +121,7 @@ class DashboardTests(unittest.TestCase):
                 c.request(method,path,body=body,headers=headers or {})
                 response=c.getresponse();status=response.status;content=response.read();c.close()
                 return status,content
-            for path in ['/','/app.js','/model.js','/app.css','/api/snapshot']:
+            for path in ['/','/app.js','/model.js','/market-model.js','/app.css','/api/snapshot','/api/market']:
                 self.assertEqual(call('GET',path)[0],200)
             self.assertEqual(call('GET','/../config.json')[0],404)
             self.assertEqual(call('GET','/api/session',headers={'Host':'evil.example'})[0],403)

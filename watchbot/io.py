@@ -102,6 +102,8 @@ class BinanceReference:
 
     async def listen(self, symbols, trigger: asyncio.Event):
         from websockets.asyncio.client import connect
+        from .market import MarketCache
+        market = MarketCache(self.cfg)
         streams = "/".join(f"{s.lower()}@kline_5m" for s in symbols)
         delay = 1
         while True:
@@ -112,6 +114,7 @@ class BinanceReference:
                     trigger.set()  # catch up through REST after every connection
                     async for message in socket:
                         payload = json.loads(message)
+                        market.ingest(payload, utc_ms())
                         k = payload.get("data", {}).get("k", {})
                         if k.get("x") is True:
                             trigger.set()
