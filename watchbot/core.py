@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from typing import Callable
 import hashlib
 import json
 import math
@@ -56,6 +57,7 @@ class Config:
     poll_seconds: int = 15
     history_bars: int = 300
     max_paper_notional_multiple: float = 1
+    setup_id: str = "trend-pullback"
     strategy_profile: str = "classic"
     entry_windows: tuple[str, ...] = ()
     session_timezone: str = "Asia/Tehran"
@@ -92,6 +94,10 @@ class Config:
         if not (1 <= self.max_hold_bars <= 288 and self.cooldown_bars >= 1
                 and 1 <= self.max_signal_age_seconds <= 120):
             raise ValueError("Invalid lifecycle settings")
+        if not isinstance(self.setup_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,63}", self.setup_id):
+            raise ValueError("Invalid setup_id")
+        if self.setup_id not in SETUP_EVALUATORS:
+            raise ValueError(f"Unknown setup_id: {self.setup_id}")
         if self.strategy_profile not in {"classic", "guarded-v1"}:
             raise ValueError("Unknown strategy profile")
         if (not 0 <= self.tp1_close_fraction < 1 or self.tp1_reward_risk <= 0
@@ -121,7 +127,7 @@ class Config:
     def fingerprint(self) -> str:
         payload = asdict(self)
         # Preserve existing experiment identities when all extension defaults apply.
-        for key, default in {"strategy_profile": "classic", "entry_windows": (),
+        for key, default in {"setup_id": "trend-pullback", "strategy_profile": "classic", "entry_windows": (),
                              "session_timezone": "Asia/Tehran", "tp1_close_fraction": 0,
                              "tp1_reward_risk": 1.5}.items():
             if payload[key] == default or key == "entry_windows" and not payload[key]:
@@ -242,6 +248,7 @@ class Analysis:
     config_hash: str = ""
     news_evidence: dict = field(default_factory=dict)
     entry_session: str = "OPEN"
+    setup_id: str = "trend-pullback"
 
     def to_dict(self):
         return asdict(self)
@@ -252,6 +259,7 @@ def _analysis_context(symbol: str, now: int, cfg: Config) -> Analysis:
     a = Analysis(symbol, cfg.source, now, "BLOCKED_DATA", None, [], [], news, note,
                  config_hash=cfg.fingerprint())
     a.strategy = GUARDED_VERSION if cfg.strategy_profile == "guarded-v1" else VERSION
+    a.setup_id = cfg.setup_id
     a.entry_session = "OPEN" if entry_window_open(cfg, now) else "MONITOR_ONLY"
     try:
         raw_news = Path(cfg.news_file).read_bytes()
@@ -278,8 +286,8 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], now: int,
     return _evaluate_frames(a, f, now, cfg, historical=historical)
 
 
-def _evaluate_frames(a: Analysis, f: dict[str, pd.DataFrame], now: int,
-                     cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
+def _evaluate_trend_pullback(a: Analysis, f: dict[str, pd.DataFrame], now: int,
+                              cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
     """Internal evaluator. Caller must validate every frame and cutoff first."""
     symbol = a.symbol
     daily, h4, m5 = (f[t].iloc[-1] for t in ["1d", "4h", "5m"])
@@ -346,3 +354,29 @@ def _evaluate_frames(a: Analysis, f: dict[str, pd.DataFrame], now: int,
     key = f"{a.strategy}:{cfg.fingerprint()}:{cfg.source}:{symbol}:{a.asof}:{a.side}"
     a.signal_id = hashlib.sha256(key.encode()).hexdigest()[:24]
     return a, f
+
+
+# Each setup consumes validated, indicator-enriched D1/H4/M5 frames and returns
+# its Analysis plus the same frames. Register additional evaluators here.
+SetupEvaluator = Callable[[Analysis, dict[str, pd.DataFrame], int, Config], tuple[Analysis, dict]]
+SETUP_EVALUATORS: dict[str, SetupEvaluator] = {}
+
+
+def register_setup(setup_id: str, evaluator: SetupEvaluator) -> None:
+    """Register a deterministic setup evaluator before loading its experiment config."""
+    if not isinstance(setup_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,63}", setup_id):
+        raise ValueError("Invalid setup_id")
+    if not callable(evaluator):
+        raise TypeError("Setup evaluator must be callable")
+    if setup_id in SETUP_EVALUATORS:
+        raise ValueError(f"Setup already registered: {setup_id}")
+    SETUP_EVALUATORS[setup_id] = evaluator
+
+
+def _evaluate_frames(a: Analysis, f: dict[str, pd.DataFrame], now: int,
+                     cfg: Config, *, historical: bool = False) -> tuple[Analysis, dict]:
+    evaluator = SETUP_EVALUATORS[cfg.setup_id]
+    return evaluator(a, f, now, cfg, historical=historical)
+
+
+register_setup("trend-pullback", _evaluate_trend_pullback)
