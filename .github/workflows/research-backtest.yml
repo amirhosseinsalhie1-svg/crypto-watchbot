@@ -2,6 +2,10 @@ name: bounded-research-backtest
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - feature/evidence-dashboard
   push:
     branches:
       - feature/dashboard-reference-and-setup-extensibility
