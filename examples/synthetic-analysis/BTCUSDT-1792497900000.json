@@ -1,0 +1,29 @@
+{
+  "symbol": "BTCUSDT",
+  "source": "SYNTHETIC_DEMO_NOT_MARKET_DATA",
+  "asof": 1792497900000,
+  "status": "TECHNICAL_CONFIRMED",
+  "side": "LONG",
+  "reasons": [
+    "قیمت، EMA50 و تنکان/کیجون روزانه همسو هستند",
+    "فیلتر ۴ساعته خارج ابر و همسو است",
+    "پولبک و شکست سه کندل قبل با کندل بسته‌شده ۵دقیقه تأیید شد"
+  ],
+  "counterevidence": [
+    "شکست کاذب و تغییر روند ممکن است؛ این قواعد هنوز اثبات سودآوری ندارند"
+  ],
+  "news_status": "UNKNOWN",
+  "news_note": "وضعیت خبر نامشخص؛ ورود فرضی متوقف است",
+  "entry": 80000.0,
+  "stop": 77791.4381270903,
+  "target": 84417.12374581941,
+  "signal_id": "038d8a6d36acded1b030ce55",
+  "strategy": "pa-ichimoku-ema-v0.1",
+  "config_hash": "5bc31f8f47509bfe",
+  "news_evidence": {
+    "sha256": "bb01bfe80b047a00f49e725f4dbf4108484bc215f7b4746bb29c51afcfc67f96",
+    "reviewed_at": null,
+    "valid_until": null,
+    "sources": []
+  }
+}

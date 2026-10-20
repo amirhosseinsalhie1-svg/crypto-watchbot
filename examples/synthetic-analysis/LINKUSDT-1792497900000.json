@@ -1,0 +1,29 @@
+{
+  "symbol": "LINKUSDT",
+  "source": "SYNTHETIC_DEMO_NOT_MARKET_DATA",
+  "asof": 1792497900000,
+  "status": "TECHNICAL_CONFIRMED",
+  "side": "LONG",
+  "reasons": [
+    "قیمت، EMA50 و تنکان/کیجون روزانه همسو هستند",
+    "فیلتر ۴ساعته خارج ابر و همسو است",
+    "پولبک و شکست سه کندل قبل با کندل بسته‌شده ۵دقیقه تأیید شد"
+  ],
+  "counterevidence": [
+    "شکست کاذب و تغییر روند ممکن است؛ این قواعد هنوز اثبات سودآوری ندارند"
+  ],
+  "news_status": "UNKNOWN",
+  "news_note": "وضعیت خبر نامشخص؛ ورود فرضی متوقف است",
+  "entry": 15.0,
+  "stop": 14.585894648829433,
+  "target": 15.828210702341135,
+  "signal_id": "c967e12ab4f9b927b933381c",
+  "strategy": "pa-ichimoku-ema-v0.1",
+  "config_hash": "5bc31f8f47509bfe",
+  "news_evidence": {
+    "sha256": "bb01bfe80b047a00f49e725f4dbf4108484bc215f7b4746bb29c51afcfc67f96",
+    "reviewed_at": null,
+    "valid_until": null,
+    "sources": []
+  }
+}
