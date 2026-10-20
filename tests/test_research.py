@@ -129,7 +129,7 @@ class ResearchTests(unittest.TestCase):
         self.assertLess(marked_equity(j, {"SOLUSDT": 99.5}, NOW + 300000), self.cfg.equity)
 
     def test_position_remains_open_past_planning_horizon_until_target(self):
-        cfg = replace(self.cfg, max_hold_bars=1)
+        cfg = replace(self.cfg, max_hold_bars=1, tp1_close_fraction=0)
         j = self.journal(cfg)
         self.enter(j)
         with j.transaction():
