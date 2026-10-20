@@ -26,9 +26,15 @@
  .canvas-wrap{height:320px}
 }
 
-/* Persian typography and clearer semantic contrast */
-@font-face{font-family:LocalUI;src:local('IRANSansX'),local('IRANSans'),local('IRANSansWeb'),local('Peyda'),local('PeydaWeb');font-display:swap}
-body{font-family:LocalUI,'IRANSansX','IRANSans','Peyda',Tahoma,Arial,sans-serif;font-kerning:normal;font-feature-settings:'kern','ss01';color:#eef3f7}
+/* Persian typography, font families and semantic contrast */
+:root{--font-fa-body:'Peyda','Peyda Web','IRANSansX','IRANSans','IRANSansWeb',Tahoma,Arial,sans-serif;--font-fa-display:'IRANSansX','IRANSans','IRANSansWeb','Peyda','Peyda Web',Tahoma,Arial,sans-serif}
+body{font-family:var(--font-fa-body);font-size:13px;font-weight:400;font-kerning:normal;font-feature-settings:'kern','ss01';color:#eef3f7}
+button,input,select{font-family:var(--font-fa-body);font-weight:500}
+h1,.panel-heading h2,.panel-heading h3,.section-label h3{font-family:var(--font-fa-display);font-weight:600}
+h1{font-weight:700}
+.metric-label,.nav-button,.status-badge,.evidence-list li,.decision-label,.risk-details,.watchlist-note{font-weight:500}
+.metric-value{font-family:var(--font-fa-display),Arial,sans-serif;font-weight:600}
+.instrument h2,.symbol-button strong,.chart-price strong,.level b{font-family:'IRANSansX','IRANSans','Peyda',Arial,sans-serif;font-weight:600}
 .panel,.metric{border-color:#30404e}
 .panel{background:#111a23}
 .metric{background:linear-gradient(120deg,#141f29,#111a23)}
