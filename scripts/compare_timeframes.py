@@ -131,6 +131,7 @@ def main() -> int:
                         output_dir=str(run_root / "charts"),
                         max_hold_bars=48 if timeframe == "5m" else 16,
                         cooldown_bars=6 if timeframe == "5m" else 2,
+                        entry_windows=("10:00-14:00", "16:00-20:00", "22:00-01:00"),
                     )
                     report = run_backtest(
                         cfg, str(dataset), start, end, str(run_root / "report-dir"),
@@ -172,6 +173,8 @@ def main() -> int:
             "costs_and_risk": "unchanged from the setup research configs",
             "holding_horizon": "4 hours on both timeframes",
             "cooldown": "30 minutes on both timeframes",
+            "entry_windows_tehran": ["10:00-14:00", "16:00-20:00", "22:00-01:00"],
+            "open_positions_monitored": "24/7; entry windows gate new entries only",
             "15m_source": "complete UTC groups of three Binance 5m candles",
             "news": "ignored for research on both sides",
             "live_scanner_changed": False,
