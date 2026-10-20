@@ -50,3 +50,13 @@ h1{font-weight:700}
 .data-banner.live{color:#68eab2;background:#10271f;border-color:#236248}
 .chart-toolbar,.chart-footer,.levels,.panel-heading,th{border-color:#30404e}
 th{color:#a9bbc9;background:#15212b}
+
+/* Live chart status and high-contrast controls */
+#live-toggle{font-weight:600;color:#d7e2ea;border-color:#536574;background:#1a2731;white-space:nowrap}
+#live-toggle:hover:not(:disabled){border-color:#9aaab6;background:#253642}
+#live-toggle.is-live{color:#051f16;background:#26dfa0;border-color:#55f0bb;box-shadow:0 0 0 1px #26dfa055}
+#live-toggle.is-waiting{color:#171000;background:#ffd166;border-color:#ffe19a;opacity:1}
+#live-toggle:disabled{opacity:.8;color:#aab6c0;border-color:#475663}
+.chart-price>span.positive{color:#35e0a1!important}.chart-price>span.negative{color:#ff626d!important}
+.legend-ema{color:#ffd166}.legend-ema:before{background:#ffd166}.legend-tenkan{color:#50d7f3}.legend-tenkan:before{background:#50d7f3}.legend-kijun{color:#c5a7ff}.legend-kijun:before{background:#c5a7ff}
+.chart-tooltip{border-color:#8395a3;color:#f2f6f8}
