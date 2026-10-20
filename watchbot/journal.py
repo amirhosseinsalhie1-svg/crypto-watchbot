@@ -240,9 +240,9 @@ class Journal:
                 return
         if target_hit:
             self._fill(p, row, state, state["remaining_qty"], p["target"], "TARGET", final=True)
-        elif count >= self.cfg.max_hold_bars:
-            self._fill(p, row, state, state["remaining_qty"], row.close, "TIMEOUT", final=True)
         else:
+            # A bar-count limit never liquidates a position. Continue managing it
+            # on every finalized candle until the active stop or target is reached.
             self.put("position_state", state)
 
     def _fill(self, p, row, state, qty, raw_exit, reason, *, final):
