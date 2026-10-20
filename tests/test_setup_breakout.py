@@ -54,6 +54,13 @@ class RangeBreakoutTests(unittest.TestCase):
         self.assertEqual(result.status, "PENDING")
         self.assertIn("شکست تازهٔ سقف/کف ۲۰ کندل بسته‌شده تأیید نشده", result.counterevidence)
 
+    def test_rejects_breakout_candle_that_closes_away_from_edge(self):
+        row = self.frames["5m"].index[-1]
+        self.frames["5m"].loc[row, "close"] = 100.05
+        result = self.evaluate()
+        self.assertEqual(result.status, "PENDING")
+        self.assertIn("کندل شکست در یک‌چهارم انتهایی دامنه بسته نشده", result.counterevidence)
+
     def test_rejects_low_volume_breakout(self):
         self.frames["5m"].loc[21, "volume"] = 1100
         result = self.evaluate()
