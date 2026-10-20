@@ -143,6 +143,25 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(trade["reason"], "TARGET")
         self.assertEqual(j.summary()["open_positions"], 0)
 
+    def test_position_remains_open_past_planning_horizon_until_target(self):
+        cfg = replace(self.cfg, max_hold_bars=1)
+        j = self.journal(cfg)
+        self.enter(j)
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW + 300000, high=100.5, low=99.5, close=100), ignore_news=True)
+        trade = j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertIsNone(trade["exit_at"])
+        self.assertEqual(j.summary()["open_positions"], 1)
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW + 600000, high=104, low=99.5, close=103.5), ignore_news=True)
+        trade = j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertEqual(trade["reason"], "TARGET")
+        self.assertEqual(j.summary()["open_positions"], 0)
+
+    def test_unknown_setup_id_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown setup_id"):
+            replace(self.cfg, setup_id="not-registered")
+
     def test_missing_news_still_blocks_paper_entry(self):
         j = self.journal()
         a = Analysis("SOLUSDT", self.cfg.source, NOW, "TECHNICAL_CONFIRMED", "LONG", [], [],
