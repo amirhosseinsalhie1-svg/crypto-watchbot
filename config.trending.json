@@ -1,15 +1,15 @@
 {
   "symbols": [
-    "BNBUSDT",
     "BTCUSDT",
     "ETHUSDT",
+    "BNBUSDT",
     "SOLUSDT",
-    "1000PEPEUSDT",
-    "WLDUSDT",
-    "NEARUSDT",
-    "SUIUSDT",
-    "PHAUSDT",
-    "XRPUSDT"
+    "XRPUSDT",
+    "LINKUSDT",
+    "ADAUSDT",
+    "LTCUSDT",
+    "AVAXUSDT",
+    "TRXUSDT"
   ],
   "source": "binance-usdm-reference",
   "database": "runtime/trending/journal.sqlite3",
