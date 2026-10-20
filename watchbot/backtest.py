@@ -18,16 +18,16 @@ from .io import load_csv
 def marked_equity(journal, prices: dict[str, float], at: int) -> float:
     """Estimated liquidation equity at finalized closes, including remaining costs."""
     value = journal.get("equity")
-    p = journal.db.execute("SELECT * FROM trades WHERE exit_at IS NULL").fetchone()
-    if p is None:
-        return value
-    state = journal.get("position_state") or {"remaining_qty": p["qty"]}
-    qty = state["remaining_qty"]
-    direction = 1 if p["side"] == "LONG" else -1
-    exit_price = prices[p["symbol"]] * (1 - direction * journal.cfg.slippage_bps_per_side / 10_000)
-    fees = (p["entry"] + exit_price) * qty * journal.cfg.fee_bps_per_side / 10_000
-    funding = p["entry"] * qty * journal.cfg.funding_bps_per_8h / 10_000 * max(0, at - p["entry_at"]) / 28_800_000
-    return value + direction * (exit_price - p["entry"]) * qty - fees - funding
+    states = journal.get("position_states", {})
+    for p in journal.db.execute("SELECT * FROM trades WHERE exit_at IS NULL"):
+        state = states.get(p["id"], {"remaining_qty": p["qty"]})
+        qty = state["remaining_qty"]
+        direction = 1 if p["side"] == "LONG" else -1
+        exit_price = prices[p["symbol"]] * (1 - direction * journal.cfg.slippage_bps_per_side / 10_000)
+        fees = (p["entry"] + exit_price) * qty * journal.cfg.fee_bps_per_side / 10_000
+        funding = p["entry"] * qty * journal.cfg.funding_bps_per_8h / 10_000 * max(0, at - p["entry_at"]) / 28_800_000
+        value += direction * (exit_price - p["entry"]) * qty - fees - funding
+    return value
 
 
 def run_backtest(cfg: Config, folder: str, start: int, end: int, output: str,
@@ -81,9 +81,9 @@ def run_backtest(cfg: Config, folder: str, start: int, end: int, output: str,
                 if progress and (now - start) % INTERVALS["1d"] == 0:
                     print(f"Backtest {iso(now)} | closed={j.summary()['closed_trades']}", file=sys.stderr, flush=True)
             with j.transaction():
-                if j.get("pending"):
-                    j.event(end, "BACKTEST_PENDING_UNFILLED_AT_END", {"id": j.get("pending")["signal_id"]})
-                    j.put("pending", None)
+                for pending in j._pending_orders():
+                    j.event(end, "BACKTEST_PENDING_UNFILLED_AT_END", {"id": pending["signal_id"]})
+                j.clear_pending()
                 j.event(end, "BACKTEST_END", {"open_policy": "KEEP_OPEN_AND_MARK_AT_FINAL_CLOSE"})
             statuses = Counter(json.loads(r[0])["status"] for r in j.db.execute("SELECT payload FROM analyses"))
             by_symbol = {}

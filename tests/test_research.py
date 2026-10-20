@@ -66,7 +66,7 @@ class ResearchTests(unittest.TestCase):
     def test_extension_defaults_preserve_existing_config_hash(self):
         c = Config()
         old = asdict(c)
-        for key in ["strategy_profile", "entry_windows", "session_timezone", "tp1_close_fraction", "tp1_reward_risk", "setup_id"]:
+        for key in ["strategy_profile", "entry_windows", "session_timezone", "tp1_close_fraction", "tp1_reward_risk", "setup_id", "max_open_positions", "min_net_reward_risk", "paper_leverage"]:
             old.pop(key)
         self.assertEqual(c.fingerprint(), hashlib.sha256(json.dumps(old, sort_keys=True).encode()).hexdigest()[:16])
 

@@ -186,7 +186,7 @@ class Telegram:
                     self.text(json.dumps(journal.summary(), ensure_ascii=False, indent=2))
                 elif command == "/pause":
                     journal.put("paused", True)
-                    journal.put("pending", None)
+                    journal.clear_pending()
                     self.text("هشدارها و ورود فرضی متوقف شد. معاملهٔ فرضی باز تا خروج پیگیری می‌شود.")
                 elif command == "/resume":
                     journal.put("paused", False)

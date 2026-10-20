@@ -1,0 +1,67 @@
+name: ten-symbol-portfolio-research
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/dashboard-reference-and-setup-extensibility
+    paths:
+      - "watchbot/**"
+      - "config.portfolio-research.json"
+      - "tests/**"
+      - ".github/workflows/portfolio-backtest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  portfolio-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install .
+
+      - name: Verify research configuration and tests
+        run: |
+          python -m unittest discover -s tests -v
+          python -c "from watchbot.core import Config; c=Config.load('config.portfolio-research.json'); assert len(c.symbols)==10 and c.max_open_positions==2 and c.min_net_reward_risk==3 and 10<=c.paper_leverage<=20"
+
+      - name: Download checksum-verified Binance USD-M archives
+        run: >-
+          python -m watchbot
+          --config config.portfolio-research.json
+          history
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --output runtime/portfolio-data
+
+      - name: Run bounded 10-symbol portfolio backtest
+        run: >-
+          python -m watchbot
+          --config config.portfolio-research.json
+          backtest
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --data runtime/portfolio-data
+          --output runtime/portfolio-report
+          --ignore-news-for-research
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ten-symbol-portfolio-backtest-2026-09-01-to-09-08
+          path: |
+            runtime/portfolio-report/report.json
+            runtime/portfolio-report/equity.csv
+            runtime/portfolio-report/ledger/trades.csv
+            runtime/portfolio-report/ledger/trade_fills.csv
+            runtime/portfolio-report/ledger/events.csv
+          if-no-files-found: error
+          retention-days: 30

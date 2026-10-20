@@ -63,6 +63,9 @@ class Config:
     session_timezone: str = "Asia/Tehran"
     tp1_close_fraction: float = 0
     tp1_reward_risk: float = 1.5
+    max_open_positions: int = 1
+    min_net_reward_risk: float = 0
+    paper_leverage: int = 10
 
     def __post_init__(self):
         if not self.symbols or len(set(self.symbols)) != len(self.symbols):
@@ -82,6 +85,12 @@ class Config:
             raise ValueError("Risk controls exceed research limits")
         if self.equity <= 0 or self.reward_risk < 1 or self.reward_risk > 10:
             raise ValueError("Invalid equity or reward/risk")
+        if type(self.max_open_positions) is not int or not 1 <= self.max_open_positions <= 2:
+            raise ValueError("max_open_positions must be 1 or 2")
+        if not 0 <= self.min_net_reward_risk <= 10:
+            raise ValueError("Invalid minimum net reward/risk")
+        if type(self.paper_leverage) is not int or not 10 <= self.paper_leverage <= 20:
+            raise ValueError("paper_leverage must be an integer from 10 through 20")
         if not (0 < self.min_stop_fraction < self.max_stop_fraction <= .1):
             raise ValueError("Invalid stop bounds")
         if not (0 < self.max_paper_notional_multiple <= 2):
@@ -129,7 +138,8 @@ class Config:
         # Preserve existing experiment identities when all extension defaults apply.
         for key, default in {"setup_id": "trend-pullback", "strategy_profile": "classic", "entry_windows": (),
                              "session_timezone": "Asia/Tehran", "tp1_close_fraction": 0,
-                             "tp1_reward_risk": 1.5}.items():
+                             "tp1_reward_risk": 1.5, "max_open_positions": 1,
+                             "min_net_reward_risk": 0, "paper_leverage": 10}.items():
             if payload[key] == default or key == "entry_windows" and not payload[key]:
                 payload.pop(key)
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]

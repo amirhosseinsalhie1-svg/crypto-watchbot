@@ -18,7 +18,7 @@ def trading_day(ms: int) -> str:
 
 
 class Journal:
-    """Single writer, one process, one paper position across all symbols."""
+    """Single writer, one process, bounded paper portfolio."""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -49,6 +49,11 @@ class Journal:
                 price REAL, fees REAL, funding REAL, pnl REAL, reason TEXT);
             CREATE TABLE IF NOT EXISTS trade_risk(trade_id TEXT PRIMARY KEY, planned_usdt REAL);
         ''')
+        trade_columns = {row[1] for row in self.db.execute("PRAGMA table_info(trades)")}
+        if "leverage" not in trade_columns:
+            self.db.execute("ALTER TABLE trades ADD COLUMN leverage INTEGER NOT NULL DEFAULT 10")
+        if "initial_margin" not in trade_columns:
+            self.db.execute("ALTER TABLE trades ADD COLUMN initial_margin REAL NOT NULL DEFAULT 0")
         existing = self.get("config_hash")
         if existing and existing != cfg.fingerprint():
             self.db.close()
@@ -129,23 +134,68 @@ class Journal:
             row[0], int(observed_at), zlib.compress(json.dumps(payload, allow_nan=False).encode()),
             json.dumps(risk, ensure_ascii=False, allow_nan=False)))
 
+    def _pending_orders(self):
+        # `pending` remains readable for older dashboard clients and one-slot configs.
+        return self.get("pending_orders", [self.get("pending")] if self.get("pending") else [])
+
+    def _set_pending_orders(self, items):
+        self.put("pending_orders", items)
+        self.put("pending", items[0] if items else None)
+
+    def clear_pending(self):
+        self._set_pending_orders([])
+
     def schedule(self, a: Analysis, *, ignore_news: bool = False):
-        if not self.cfg.paper_enabled or a.status != "TECHNICAL_CONFIRMED":
+        self.schedule_many([a], ignore_news=ignore_news)
+
+    def schedule_many(self, analyses, *, ignore_news: bool = False):
+        """Rank same-scan candidates by estimated net R:R before reserving slots."""
+        if not self.cfg.paper_enabled:
             return
-        if not entry_window_open(self.cfg, a.asof):
-            self.event(a.asof, "PAPER_SESSION_BLOCK", {"id": a.signal_id})
-            return
-        if not ignore_news and a.news_status != "CLEAR_REVIEWED":
-            return
-        if self.get("pending") or self.db.execute("SELECT 1 FROM trades WHERE exit_at IS NULL").fetchone():
-            return
-        if a.asof < self.get("last_signal", 0) + self.cfg.cooldown_bars * INTERVALS["5m"]:
-            return
-        if not self.eligible(a.asof):
-            return
-        self.put("pending", a.to_dict())
-        self.put("last_signal", a.asof)
-        self.event(a.asof, "PAPER_PENDING", {"id": a.signal_id, "ignore_news": ignore_news})
+        pending = self._pending_orders()
+        opened = self.db.execute("SELECT COUNT(*) FROM trades WHERE exit_at IS NULL").fetchone()[0]
+        occupied = opened + len(pending)
+        candidates = []
+        for a in analyses:
+            if a.status != "TECHNICAL_CONFIRMED":
+                continue
+            if not entry_window_open(self.cfg, a.asof):
+                self.event(a.asof, "PAPER_SESSION_BLOCK", {"id": a.signal_id})
+                continue
+            if not ignore_news and a.news_status != "CLEAR_REVIEWED":
+                continue
+            if any(x["symbol"] == a.symbol for x in pending):
+                continue
+            if self.db.execute("SELECT 1 FROM trades WHERE exit_at IS NULL AND symbol=?", (a.symbol,)).fetchone():
+                continue
+            if a.asof < self.get(f"last_signal:{a.symbol}", 0) + self.cfg.cooldown_bars * INTERVALS["5m"]:
+                continue
+            if not self.eligible(a.asof):
+                continue
+            entry = float(a.entry)
+            direction = 1 if a.side == "LONG" else -1
+            distance = direction * (entry - float(a.stop))
+            reward = direction * (float(a.target) - entry)
+            slip, fee = self.cfg.slippage_bps_per_side / 10_000, self.cfg.fee_bps_per_side / 10_000
+            funding = entry * self.cfg.funding_bps_per_8h / 10_000 * self.cfg.max_hold_bars / 96
+            risk = distance + entry * slip + fee * (entry + float(a.stop)) + funding
+            net_reward = reward - entry * slip - fee * (entry + float(a.target)) - funding
+            net_rr = net_reward / risk if risk > 0 else 0
+            if self.cfg.min_net_reward_risk and net_rr + 1e-12 < self.cfg.min_net_reward_risk:
+                self.event(a.asof, "PAPER_RR_BLOCKED", {"id": a.signal_id, "net_rr": net_rr,
+                            "minimum": self.cfg.min_net_reward_risk, "stage": "signal_estimate"})
+                continue
+            candidates.append((net_rr, a))
+        candidates.sort(key=lambda pair: (-pair[0], pair[1].symbol))
+        for net_rr, a in candidates:
+            if occupied >= self.cfg.max_open_positions:
+                break
+            pending.append(a.to_dict())
+            occupied += 1
+            self.put(f"last_signal:{a.symbol}", a.asof)
+            self.event(a.asof, "PAPER_PENDING", {"id": a.signal_id, "ignore_news": ignore_news,
+                                                  "estimated_net_rr": net_rr})
+        self._set_pending_orders(pending)
 
     def advance(self, symbol, bars, *, ignore_news=False):
         """Fill ONLY the next candle's open; process each completed bar exactly once."""
@@ -161,18 +211,20 @@ class Journal:
         for row in bars[bars.close_time > cursor].itertuples(index=False):
             at = int(row.open_time)
             self.day(at)
-            pending = self.get("pending")
-            if pending and at > pending["asof"]:
-                self.event(at, "PAPER_EXPIRED", {"id": pending["signal_id"]})
-                self.put("pending", None)
-            if pending and pending["symbol"] == symbol and at == pending["asof"]:
+            pending_orders = self._pending_orders()
+            pending = next((p for p in pending_orders if p["symbol"] == symbol and at == p["asof"]), None)
+            expired = [p for p in pending_orders if at > p["asof"]]
+            for p in expired:
+                self.event(at, "PAPER_EXPIRED", {"id": p["signal_id"]})
+            pending_orders = [p for p in pending_orders if p not in expired and p is not pending]
+            if pending:
                 gate, _ = news_gate(self.cfg.news_file, symbol, at)
-                self.put("pending", None)
                 if (not self.get("paused", False) and entry_window_open(self.cfg, at)
                         and (ignore_news or gate == "CLEAR_REVIEWED") and self.eligible(at)):
                     self._open(pending, row)
                 else:
                     self.event(at, "PAPER_BLOCKED", {"news": gate})
+            self._set_pending_orders(pending_orders)
             position = self.db.execute("SELECT * FROM trades WHERE exit_at IS NULL AND symbol=?", (symbol,)).fetchone()
             if position:
                 self._mark(position, row)
@@ -194,27 +246,47 @@ class Journal:
         funding_buffer = entry * cfg.funding_bps_per_8h / 10_000 * cfg.max_hold_bars / 96
         # Includes entry/stop fees, adverse stop slippage and a holding-cost buffer.
         unit_risk = distance + stop * slip + fee * (entry + stop * (1 - direction * slip)) + funding_buffer
+        if (unit_risk / entry) >= 0.8 / cfg.paper_leverage:
+            self.event(int(row.open_time), "PAPER_LEVERAGE_STOP_BUFFER_BLOCK", {
+                "id": p["signal_id"], "leverage": cfg.paper_leverage,
+                "risk_fraction_of_notional": unit_risk / entry,
+                "maximum": 0.8 / cfg.paper_leverage})
+            return
+        target = entry + direction * cfg.reward_risk * distance
+        unit_reward = direction * (target - entry) - entry * slip - fee * (entry + target) - funding_buffer
+        net_rr = unit_reward / unit_risk if unit_risk > 0 else 0
+        if cfg.min_net_reward_risk and net_rr + 1e-12 < cfg.min_net_reward_risk:
+            self.event(int(row.open_time), "PAPER_RR_BLOCKED", {"id": p["signal_id"], "net_rr": net_rr,
+                        "minimum": cfg.min_net_reward_risk, "stage": "fill_price"})
+            return
         remaining_daily = max(0, self.get("day_start_equity") * cfg.daily_loss_fraction
                               - self.get("daily_gross_losses", 0))
-        budget = min(equity * cfg.risk_fraction, remaining_daily)
+        active_risk = self.db.execute('''SELECT COALESCE(SUM(r.planned_usdt),0) FROM trade_risk r
+                              JOIN trades t ON t.id=r.trade_id WHERE t.exit_at IS NULL''').fetchone()[0]
+        budget = min(equity * cfg.risk_fraction, max(0, remaining_daily - active_risk))
         qty = min(budget / unit_risk, equity * cfg.max_paper_notional_multiple / entry)
         if qty <= 0:
             return
-        target = entry + direction * cfg.reward_risk * distance
-        self.db.execute('''INSERT INTO trades(id,symbol,side,signal_at,entry_at,entry,stop,target,qty)
-                           VALUES(?,?,?,?,?,?,?,?,?)''',
+        initial_margin = qty * entry / cfg.paper_leverage
+        self.db.execute('''INSERT INTO trades(id,symbol,side,signal_at,entry_at,entry,stop,target,qty,leverage,initial_margin)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
                         (p["signal_id"], p["symbol"], p["side"], p["asof"],
-                         int(row.open_time), entry, stop, target, qty))
+                         int(row.open_time), entry, stop, target, qty, cfg.paper_leverage, initial_margin))
         self.db.execute("INSERT INTO trade_risk VALUES(?,?)", (p["signal_id"], qty * unit_risk))
-        self.put("position_state", {"id": p["signal_id"], "remaining_qty": qty,
+        states = self.get("position_states", {})
+        states[p["signal_id"]] = {"id": p["signal_id"], "remaining_qty": qty,
+                 "leverage": cfg.paper_leverage, "estimated_margin_usdt": initial_margin,
                  "current_stop": stop, "tp1": entry + direction * cfg.tp1_reward_risk * distance,
-                 "tp1_done": False, "realized_pnl": 0})
-        self.event(int(row.open_time), "PAPER_OPEN", {"id": p["signal_id"], "qty": qty})
+                 "tp1_done": False, "realized_pnl": 0}
+        self.put("position_states", states)
+        self.put("position_state", states[p["signal_id"]])
+        self.event(int(row.open_time), "PAPER_OPEN", {"id": p["signal_id"], "qty": qty, "net_rr": net_rr})
 
     def _mark(self, p, row):
         direction = 1 if p["side"] == "LONG" else -1
-        state = self.get("position_state")
-        if not state or state["id"] != p["id"]:
+        states = self.get("position_states", {})
+        state = states.get(p["id"])
+        if not state:
             state = {"id": p["id"], "remaining_qty": p["qty"], "current_stop": p["stop"],
                      "tp1_done": False, "realized_pnl": 0,
                      "tp1": p["entry"] + direction * self.cfg.tp1_reward_risk * abs(p["entry"] - p["stop"])}
@@ -243,6 +315,8 @@ class Journal:
         else:
             # A bar-count limit never liquidates a position. Continue managing it
             # on every finalized candle until the active stop or target is reached.
+            states[p["id"]] = state
+            self.put("position_states", states)
             self.put("position_state", state)
 
     def _fill(self, p, row, state, qty, raw_exit, reason, *, final):
@@ -270,7 +344,13 @@ class Journal:
         if final:
             self.put("consecutive_losses", self.get("consecutive_losses", 0) + 1 if state["realized_pnl"] < 0 else 0)
         self.put("daily_gross_losses", self.get("daily_gross_losses", 0) + max(0, -pnl))
-        self.put("position_state", None if final else state)
+        states = self.get("position_states", {})
+        if final:
+            states.pop(p["id"], None)
+        else:
+            states[p["id"]] = state
+        self.put("position_states", states)
+        self.put("position_state", next(iter(states.values()), None))
         self.event(at, "PAPER_CLOSED" if final else "PAPER_PARTIAL", {"id": p["id"], "pnl": pnl, "reason": reason})
 
     def summary(self):
@@ -290,8 +370,10 @@ class Journal:
                 "profit_factor": win / loss if loss else None,
                 "max_closed_equity_drawdown": self.get("max_drawdown"),
                 "open_positions": self.db.execute("SELECT COUNT(*) FROM trades WHERE exit_at IS NULL").fetchone()[0],
-                "pending": self.get("pending") is not None,
-                "position_state": self.get("position_state"),
+                "pending": bool(self._pending_orders()),
+                "pending_count": len(self._pending_orders()),
+                "position_state": next(iter(self.get("position_states", {}).values()), self.get("position_state")),
+                "position_states": list(self.get("position_states", {}).values()),
                 "note": "Estimated costs, no mark-price liquidation model. No profitability conclusion."}
 
     def export(self, directory: str):
