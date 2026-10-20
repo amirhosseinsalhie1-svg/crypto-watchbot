@@ -111,13 +111,19 @@ class PaperTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Journal(replace(self.cfg, fee_bps_per_side=8))
 
-    def test_timeout_closes_position(self):
+    def test_position_stays_open_after_planning_horizon_until_target(self):
         self.seed()
+        self.step(bar(NOW))
         with self.j.transaction():
-            self.j.advance("SOLUSDT", bar(NOW), ignore_news=True)
             self.j.db.execute("UPDATE trades SET bars=?", (self.cfg.max_hold_bars - 1,))
         self.step(bar(NOW + 300_000))
-        self.assertEqual(self.j.db.execute("SELECT reason FROM trades").fetchone()[0], "TIMEOUT")
+        trade = self.j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertIsNone(trade["exit_at"])
+        self.assertEqual(self.j.summary()["open_positions"], 1)
+        self.step(bar(NOW + 600_000, high=103, low=99.5, close=102.5))
+        trade = self.j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertEqual(trade["reason"], "TARGET")
+        self.assertEqual(self.j.summary()["open_positions"], 0)
 
     def test_history_gap_halts(self):
         self.seed()
