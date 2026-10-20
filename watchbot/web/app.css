@@ -25,3 +25,22 @@
  .evidence-panel{order:2}
  .canvas-wrap{height:320px}
 }
+
+/* Persian typography and clearer semantic contrast */
+@font-face{font-family:LocalUI;src:local('IRANSansX'),local('IRANSans'),local('IRANSansWeb'),local('Peyda'),local('PeydaWeb');font-display:swap}
+body{font-family:LocalUI,'IRANSansX','IRANSans','Peyda',Tahoma,Arial,sans-serif;font-kerning:normal;font-feature-settings:'kern','ss01';color:#eef3f7}
+.panel,.metric{border-color:#30404e}
+.panel{background:#111a23}
+.metric{background:linear-gradient(120deg,#141f29,#111a23)}
+.panel-heading p,.muted,.aside-caption,.chart-footer,.metric-label,.metric-note{color:#a0afbc}
+.page-heading p,.source-card small,.watchlist-note,.risk-details,.decision-date{color:#9aabba}
+.status-badge.confirmed{color:#63edb2;background:#103428;border-color:#247e5b}
+.status-badge.pending{color:#ffd06a;background:#3a3018;border-color:#80672b}
+.status-badge.blocked{color:#ff858d;background:#3c2027;border-color:#88434f}
+.status-badge.expired{color:#a9bdd0;background:#1d2b38;border-color:#405467}
+.positive{color:#55e0a5!important}.negative{color:#ff7c86!important}
+.news-note{color:#ffcf70;background:#302817}
+.data-banner{color:#ffcf70;background:#292316;border-color:#594a25}
+.data-banner.live{color:#68eab2;background:#10271f;border-color:#236248}
+.chart-toolbar,.chart-footer,.levels,.panel-heading,th{border-color:#30404e}
+th{color:#a9bbc9;background:#15212b}
