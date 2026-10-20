@@ -209,3 +209,8 @@ CI فقط تست و دمو را اجرا می‌کند؛ برای اجرای د�
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 - [GitHub Actions scheduled event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - [KCEX User Agreement](https://www.kcex.com/en-US/support/articles/23962442522649): هنگام بررسی در ۲۰ اکتبر ۲۰۲۶ ایران در فهرست محدودیت بود؛ اتصال KCEX در این پروژه پیاده نشده است. اطلاعات محدودیت حساب و سرویس را از مرجع رسمی زمان استفاده بررسی کنید.
+
+
+## فهرست بازارهای پرمعامله برای داشبورد
+
+برای اجرای دیدبان ده‌نمادی Binance USDⓈ-M بدون دست‌زدن به دیتابیس پایش فعلی، از `config.trending.json` استفاده کنید. فهرست نمادها و تاریخ مبنای رتبه‌بندی در [TREND_WATCHLIST_FA.md](docs/TREND_WATCHLIST_FA.md) آمده است. این فهرست ثابت است و رتبه‌بندی خودکار لحظه‌ای نیست.
