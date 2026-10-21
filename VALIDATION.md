@@ -35,3 +35,7 @@ User confirmed direct server-time and 300 BTC-SWAP-USDT five-minute candles on W
 ## Toobit dashboard integration
 
 57 Python tests and 14 JavaScript tests passed locally. Dashboard tests verify closed-candle evidence persistence, immutable observation frontiers, legacy record handling, SQLite read-only snapshots, HTTP asset/origin behavior, and queued pause/resume controls. Full Toobit live snapshot already passed on the user host; dashboard live operation still requires host verification.
+
+## Dedicated Telegram relay
+
+61 Python tests and 5 new Worker tests passed locally (mocked upstream); no Cloudflare deployment or real Telegram delivery performed. Relay tests check authenticated routing, multipart forwarding, HTTPS origin validation, invalid-token redaction, method allowlist, fixed upstream host and exception redaction.

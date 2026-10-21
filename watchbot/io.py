@@ -245,14 +245,40 @@ class Telegram:
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
         self.chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
         self.operator = os.getenv("TELEGRAM_OPERATOR_USER_ID", "").strip()
+        self.relay_url = os.getenv("TELEGRAM_RELAY_URL", "").strip().rstrip("/")
+        self.relay_key = os.getenv("TELEGRAM_RELAY_KEY", "").strip()
+        if bool(self.relay_url) != bool(self.relay_key):
+            raise ValueError("Set both Telegram relay URL and key")
+        if self.relay_url:
+            parsed = urllib.parse.urlsplit(self.relay_url)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+                    or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+                raise ValueError("Telegram relay URL must be an HTTPS origin")
+
+    @property
+    def authenticated(self):
+        return bool(self.relay_url and self.relay_key) or bool(self.token)
+
+    def _request(self, method, data, content_type="application/x-www-form-urlencoded"):
+        if method not in {"getMe", "getUpdates", "sendMessage", "sendPhoto"}:
+            raise ValueError("Unsupported Telegram method")
+        headers = {"Content-Type": content_type}
+        if self.relay_url:
+            url = self.relay_url + "/telegram/" + method
+            headers["Authorization"] = "Bearer " + self.relay_key
+        else:
+            import re
+            if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", self.token):
+                raise ValueError("Invalid Telegram token format; enter it again")
+            url = f"https://api.telegram.org/bot{self.token}/{method}"
+        return request_json(url, data=data, headers=headers, attempts=1, direct=bool(self.relay_url))
 
     @property
     def configured(self):
-        return bool(self.token and self.chat)
+        return bool(self.authenticated and self.chat)
 
     def call(self, method, payload):
-        result = request_json(f"https://api.telegram.org/bot{self.token}/{method}",
-                              data=urllib.parse.urlencode(payload).encode(), attempts=1)
+        result = self._request(method, urllib.parse.urlencode(payload).encode())
         if not result.get("ok"):
             raise NetworkError("Telegram rejected request; details redacted")
         return result["result"]
@@ -272,9 +298,8 @@ class Telegram:
                       'filename="analysis.png"\r\nContent-Type: image/png\r\n\r\n').encode()
                      + image + b"\r\n")
         parts.append(f"--{boundary}--\r\n".encode())
-        result = request_json(f"https://api.telegram.org/bot{self.token}/sendPhoto",
-                              data=b"".join(parts),
-                              headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, attempts=1)
+        result = self._request("sendPhoto", b"".join(parts),
+                               f"multipart/form-data; boundary={boundary}")
         if not result.get("ok"):
             raise NetworkError("Telegram photo failed; details redacted")
         return result["result"]

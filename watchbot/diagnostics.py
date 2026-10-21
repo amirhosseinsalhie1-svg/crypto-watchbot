@@ -42,7 +42,7 @@ def doctor(cfg: Config, *, live: bool = False) -> dict:
         checks.append({"name": "timezone", "status": "FAIL", "detail": "Install timezone database (tzdata)"})
 
     telegram = Telegram()
-    if bool(telegram.token) != bool(telegram.chat):
+    if telegram.authenticated != bool(telegram.chat):
         status, detail = "FAIL", "Set both Telegram environment variables or leave both empty"
     elif not telegram.configured:
         status, detail = "WARN", "Telegram disabled; local analysis remains available"

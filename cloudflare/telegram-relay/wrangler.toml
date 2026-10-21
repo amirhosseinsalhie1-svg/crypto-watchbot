@@ -1,0 +1,7 @@
+name = "watchbot-telegram-relay"
+main = "worker.mjs"
+compatibility_date = "2026-10-21"
+workers_dev = true
+
+[observability]
+enabled = false
