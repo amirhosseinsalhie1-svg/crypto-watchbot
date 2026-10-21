@@ -8,7 +8,7 @@ import os
 
 from .core import Config, INTERVALS, analyze, utc_ms, validate_frame
 from .diagnostics import validate_snapshot
-from .io import BinanceReference, NetworkError, Telegram, load_csv
+from .io import BinanceReference, MexcReference, NetworkError, Telegram, load_csv
 from .journal import Journal
 from .render import caption, chart
 
@@ -99,9 +99,10 @@ class Engine:
 
 
 async def run_live(cfg: Config, once=False):
-    if cfg.source != "binance-usdm-reference":
-        raise ValueError("Live provider is binance-usdm-reference; use CSV for other verified sources")
-    provider, telegram = BinanceReference(cfg), Telegram()
+    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual"):
+        raise ValueError("Unsupported live source; use Binance, MEXC or CSV replay")
+    provider = MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg)
+    telegram = Telegram()
     available = await asyncio.to_thread(provider.available_symbols)
     missing = set(cfg.symbols) - available
     if missing:
@@ -110,7 +111,7 @@ async def run_live(cfg: Config, once=False):
         engine = Engine(cfg)
         trigger = asyncio.Event()
         task = asyncio.create_task(provider.listen(cfg.symbols, trigger)) if not once else None
-        print("PAPER/RESEARCH ONLY | Binance reference feed | Telegram " +
+        print("PAPER/RESEARCH ONLY | " + cfg.source + " | Telegram " +
               ("configured" if telegram.configured else "disabled (no credentials)"), flush=True)
         try:
             while True:

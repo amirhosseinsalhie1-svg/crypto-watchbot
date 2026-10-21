@@ -24,12 +24,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request_json(url, *, data=None, headers=None, attempts=3):
+def request_json(url, *, data=None, headers=None, attempts=3, direct=False):
     """Bounded retries; errors never expose URLs (Telegram tokens live in URLs)."""
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(url, data=data, headers=headers or {})
-            with urllib.request.build_opener(NoRedirect()).open(req, timeout=20) as response:
+            handlers = [NoRedirect()]
+            if direct:
+                handlers.append(urllib.request.ProxyHandler({}))
+            with urllib.request.build_opener(*handlers).open(req, timeout=20) as response:
                 body = response.read(8_000_001)
                 if len(body) > 8_000_000:
                     raise NetworkError("Response exceeds size limit")
@@ -122,6 +125,70 @@ class BinanceReference:
                 trigger.set()
                 await asyncio.sleep(delay)
                 delay = min(30, delay * 2)
+
+
+class MexcReference:
+    """Public USDT perpetual candles via direct HTTPS; REST polling only."""
+    BASE = "https://api.mexc.com"
+    PERIODS = {"5m": "Min5", "4h": "Hour4", "1d": "Day1"}
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.cache = {}
+
+    def get(self, endpoint, **params):
+        payload = request_json(self.BASE + endpoint + "?" + urllib.parse.urlencode(params),
+                               direct=True)
+        if not isinstance(payload, dict) or payload.get("success") is not True or payload.get("code") != 0:
+            raise NetworkError("MEXC public API rejected request")
+        return payload["data"]
+
+    def server_time(self):
+        now = int(self.get("/api/v1/contract/ping"))
+        if abs(now - utc_ms()) > 10_000:
+            raise NetworkError("Host clock skew exceeds 10 seconds; synchronize clock")
+        return now
+
+    def available_symbols(self):
+        rows = self.get("/api/v1/contract/detail/country")
+        if isinstance(rows, dict):
+            rows = [rows]
+        return {r["symbol"].replace("_", "") for r in rows
+                if r.get("state") == 0 and r.get("futureType") == 1
+                and r.get("quoteCoin") == "USDT" and r.get("settleCoin") == "USDT"}
+
+    def snapshot(self, symbols):
+        now = self.server_time()
+        result = {}
+        for symbol in symbols:
+            result[symbol] = {}
+            for tf, duration in INTERVALS.items():
+                boundary = now // duration * duration
+                key = symbol, tf
+                if key not in self.cache or self.cache[key][0] != boundary:
+                    raw = self.get("/api/v1/contract/kline/" + symbol[:-4] + "_USDT",
+                                   interval=self.PERIODS[tf],
+                                   start=(boundary - self.cfg.history_bars * duration) // 1000,
+                                   end=boundary // 1000 - 1)
+                    keys = ("time", "open", "high", "low", "close", "vol")
+                    if (not isinstance(raw, dict) or any(not isinstance(raw.get(k), list) for k in keys)
+                            or len({len(raw[k]) for k in keys}) != 1):
+                        raise NetworkError("Malformed MEXC candle arrays")
+                    frame = pd.DataFrame({"open_time": raw["time"], "open": raw["open"],
+                                          "high": raw["high"], "low": raw["low"],
+                                          "close": raw["close"], "volume": raw["vol"]})
+                    frame["open_time"] = pd.to_numeric(frame.open_time, errors="raise") * 1000
+                    frame["close_time"] = frame.open_time + duration - 1
+                    frame = frame[frame.open_time < boundary].reset_index(drop=True)
+                    frame = validate_frame(frame, tf, now)
+                    self.cache[key] = boundary, frame
+                result[symbol][tf] = self.cache[key][1]
+        return self.server_time(), result
+
+    async def listen(self, symbols, trigger):
+        while True:
+            await asyncio.sleep(self.cfg.poll_seconds)
+            trigger.set()
 
 
 class Telegram:
