@@ -17,7 +17,8 @@ from .io import load_csv
 
 FEATURE_COLUMNS = (
     "ema9_gap_pct", "ema21_gap_pct", "ema9_ema21_gap_pct",
-    "rsi14", "macd_line_pct", "macd_signal_pct", "macd_hist_pct",
+    "rsi14", "tsi25_13", "tsi_signal13", "tsi_hist",
+    "macd_line_pct", "macd_signal_pct", "macd_hist_pct",
     "vwap20_gap_pct", "bb20_percent_b", "bb20_width_pct",
     "atr14_pct", "volume_sma20_ratio",
 )
@@ -44,6 +45,19 @@ def add_candidate_features(frame: pd.DataFrame) -> pd.DataFrame:
     rsi = 100 - 100 / (1 + rs)
     rsi = rsi.mask((loss == 0) & (gain > 0), 100).mask((loss == 0) & (gain == 0), 50)
     d["rsi14"] = rsi
+
+    momentum = close.diff()
+    tsi_numerator = momentum.ewm(span=25, adjust=False, min_periods=25).mean().ewm(
+        span=13, adjust=False, min_periods=13
+    ).mean()
+    tsi_denominator = momentum.abs().ewm(span=25, adjust=False, min_periods=25).mean().ewm(
+        span=13, adjust=False, min_periods=13
+    ).mean().replace(0, np.nan)
+    tsi = 100 * tsi_numerator / tsi_denominator
+    tsi_signal = tsi.ewm(span=13, adjust=False, min_periods=13).mean()
+    d["tsi25_13"] = tsi
+    d["tsi_signal13"] = tsi_signal
+    d["tsi_hist"] = tsi - tsi_signal
 
     macd = close.ewm(span=12, adjust=False, min_periods=26).mean() - close.ewm(
         span=26, adjust=False, min_periods=26
