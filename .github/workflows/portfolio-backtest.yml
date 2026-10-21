@@ -1,4 +1,4 @@
-name: ten-symbol-portfolio-research
+name: ten-symbol-leverage-research
 
 on:
   workflow_dispatch:
@@ -16,6 +16,10 @@ permissions:
 
 jobs:
   portfolio-backtest:
+    strategy:
+      fail-fast: false
+      matrix:
+        leverage: [10, 15, 20]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -43,25 +47,25 @@ jobs:
           --end 2026-10-01T00:00:00Z
           --output runtime/portfolio-data
 
-      - name: Run bounded 10-symbol portfolio backtest
+      - name: Run fixed-risk portfolio backtest
         run: >-
-          python -m watchbot
+          python -m watchbot.leverage_research
           --config config.portfolio-research.json
-          backtest
+          --leverage ${{ matrix.leverage }}
           --start 2026-09-01T00:00:00Z
           --end 2026-10-01T00:00:00Z
           --data runtime/portfolio-data
-          --output runtime/portfolio-report
-          --ignore-news-for-research
+          --output runtime/portfolio-report/${{ matrix.leverage }}x
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ten-symbol-portfolio-backtest-2026-09
+          name: ten-symbol-backtest-2026-09-${{ matrix.leverage }}x
           path: |
-            runtime/portfolio-report/report.json
-            runtime/portfolio-report/equity.csv
-            runtime/portfolio-report/ledger/trades.csv
-            runtime/portfolio-report/ledger/trade_fills.csv
-            runtime/portfolio-report/ledger/events.csv
+            runtime/portfolio-report/${{ matrix.leverage }}x/report.json
+            runtime/portfolio-report/${{ matrix.leverage }}x/comparison-row.json
+            runtime/portfolio-report/${{ matrix.leverage }}x/equity.csv
+            runtime/portfolio-report/${{ matrix.leverage }}x/ledger/trades.csv
+            runtime/portfolio-report/${{ matrix.leverage }}x/ledger/trade_fills.csv
+            runtime/portfolio-report/${{ matrix.leverage }}x/ledger/events.csv
           if-no-files-found: error
           retention-days: 30
