@@ -5,7 +5,7 @@ import importlib.metadata
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .core import Config, INTERVALS, iso, news_gate, utc_ms, validate_frame
-from .io import BinanceReference, MexcReference, NetworkError, Telegram
+from .io import BinanceReference, MexcReference, ToobitReference, NetworkError, Telegram
 
 
 def validate_snapshot(cfg: Config, now: int, snapshots: dict) -> dict:
@@ -58,14 +58,15 @@ def doctor(cfg: Config, *, live: bool = False) -> dict:
         status == "CLEAR_REVIEWED" for status in news.values()) else "WARN",
         "detail": news})
     market = None
-    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual"):
+    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual", "toobit-usdt-perpetual"):
         checks.append({"name": "live_source", "status": "FAIL",
                        "detail": "Configured source supports CSV replay only"})
     elif not live:
         checks.append({"name": "market", "status": "WARN", "detail": "Not probed; use doctor --live"})
     else:
         try:
-            provider = MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg)
+            provider = (ToobitReference(cfg) if cfg.source == "toobit-usdt-perpetual" else
+                        MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg))
             missing = set(cfg.symbols) - provider.available_symbols()
             if missing:
                 raise ValueError("Unavailable perpetual symbols: " + ", ".join(sorted(missing)))

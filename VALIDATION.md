@@ -27,3 +27,7 @@ Python 3.15 on Windows and Linux. Live market connectivity was not tested.
 ## MEXC adapter
 
 44 local tests passed on Python 3.12, including mocked MEXC seconds/milliseconds conversion, open-candle exclusion, three-timeframe cache, clock skew rejection, and enabled perpetual filtering. Offline MEXC doctor passed. Live full-snapshot access could not be verified from this environment (non-JSON network responses). User independently verified direct MEXC ping and 2000 BTC Min5 candles on Windows Python 3.15.0. All configured symbols and timeframes still require live doctor validation on that host.
+
+## Toobit adapter
+
+User confirmed direct server-time and 300 BTC-SWAP-USDT five-minute candles on Windows Python 3.15.0. Live rows had zero close-time values. New mocked tests cover derived close times, unfinished candle exclusion, symbol mapping, all three timeframes, cache, contract eligibility, and API error payload rejection. Full live four-symbol snapshot must still be checked on the user host.

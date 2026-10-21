@@ -8,7 +8,7 @@ import os
 
 from .core import Config, INTERVALS, analyze, utc_ms, validate_frame
 from .diagnostics import validate_snapshot
-from .io import BinanceReference, MexcReference, NetworkError, Telegram, load_csv
+from .io import BinanceReference, MexcReference, ToobitReference, NetworkError, Telegram, load_csv
 from .journal import Journal
 from .render import caption, chart
 
@@ -99,9 +99,10 @@ class Engine:
 
 
 async def run_live(cfg: Config, once=False):
-    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual"):
-        raise ValueError("Unsupported live source; use Binance, MEXC or CSV replay")
-    provider = MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg)
+    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual", "toobit-usdt-perpetual"):
+        raise ValueError("Unsupported live source; use Binance, MEXC, Toobit or CSV replay")
+    provider = (ToobitReference(cfg) if cfg.source == "toobit-usdt-perpetual" else
+                        MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg))
     telegram = Telegram()
     available = await asyncio.to_thread(provider.available_symbols)
     missing = set(cfg.symbols) - available

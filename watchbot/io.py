@@ -127,6 +127,55 @@ class BinanceReference:
                 delay = min(30, delay * 2)
 
 
+class ToobitReference(BinanceReference):
+    """Public USDT perpetual feed; direct REST polling, no account API."""
+    BASE = "https://api.toobit.com"
+
+    def get(self, endpoint, **params):
+        if endpoint == "/fapi/v1/time":
+            path = "/api/v1/time"
+        elif endpoint == "/fapi/v1/klines":
+            path = "/quote/v1/klines"
+            symbol = params["symbol"]
+            params["symbol"] = symbol[:-4] + "-SWAP-USDT"
+        else:
+            raise ValueError("Unsupported Toobit market endpoint")
+        payload = request_json(self.BASE + path + "?" + urllib.parse.urlencode(params), direct=True)
+        if endpoint.endswith("/klines"):
+            if not isinstance(payload, list):
+                raise NetworkError("Invalid Toobit candle response")
+            duration = INTERVALS[params["interval"]]
+            normalized = []
+            for row in payload:
+                if not isinstance(row, list) or len(row) < 7:
+                    raise NetworkError("Malformed Toobit candle")
+                candle = row.copy()
+                # Live API returns 0 for close time; derive the exclusive boundary - 1.
+                opened = int(candle[0])
+                if float(candle[0]) != opened:
+                    raise NetworkError("Invalid Toobit timestamp")
+                candle[6] = opened + duration - 1
+                normalized.append(candle)
+            return normalized
+        if not isinstance(payload, dict) or "serverTime" not in payload:
+            raise NetworkError("Invalid Toobit server time response")
+        return payload
+
+    def available_symbols(self):
+        info = request_json(self.BASE + "/api/v1/exchangeInfo", direct=True)
+        if not isinstance(info, dict) or not isinstance(info.get("contracts"), list):
+            raise NetworkError("Invalid Toobit contract information")
+        return {c["symbol"].replace("-SWAP-", "") for c in info["contracts"]
+                if c.get("status") == "TRADING" and c.get("inverse") is False
+                and c.get("marginToken") == "USDT" and c.get("quoteAsset") == "USDT"
+                and c.get("symbol", "").endswith("-SWAP-USDT")}
+
+    async def listen(self, symbols, trigger):
+        while True:
+            await asyncio.sleep(self.cfg.poll_seconds)
+            trigger.set()
+
+
 class MexcReference:
     """Public USDT perpetual candles via direct HTTPS; REST polling only."""
     BASE = "https://api.mexc.com"

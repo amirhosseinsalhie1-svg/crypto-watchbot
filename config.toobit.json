@@ -1,0 +1,29 @@
+{
+  "symbols": [
+    "SOLUSDT",
+    "ORDIUSDT",
+    "LINKUSDT",
+    "BTCUSDT"
+  ],
+  "source": "toobit-usdt-perpetual",
+  "database": "runtime/toobit/journal.sqlite3",
+  "output_dir": "runtime/toobit/charts",
+  "news_file": "news.json",
+  "equity": 152.37,
+  "risk_fraction": 0.0025,
+  "daily_loss_fraction": 0.0075,
+  "fee_bps_per_side": 5.0,
+  "slippage_bps_per_side": 2.0,
+  "funding_bps_per_8h": 3.0,
+  "paper_enabled": false,
+  "reward_risk": 2.0,
+  "max_hold_bars": 48,
+  "cooldown_bars": 6,
+  "max_signal_age_seconds": 45,
+  "max_entry_gap_fraction": 0.003,
+  "min_stop_fraction": 0.001,
+  "max_stop_fraction": 0.03,
+  "poll_seconds": 15,
+  "history_bars": 300,
+  "max_paper_notional_multiple": 1.0
+}
