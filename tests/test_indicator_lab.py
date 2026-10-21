@@ -26,6 +26,8 @@ class IndicatorLabTests(unittest.TestCase):
         valid = result.iloc[100:][list(FEATURE_COLUMNS)]
         self.assertTrue(np.isfinite(valid.to_numpy()).all())
         self.assertTrue(((valid.rsi14 >= 0) & (valid.rsi14 <= 100)).all())
+        self.assertTrue(((valid.tsi25_13 >= -100) & (valid.tsi25_13 <= 100)).all())
+        self.assertTrue((valid.tsi_hist == valid.tsi25_13 - valid.tsi_signal13).all())
 
     def test_future_bars_do_not_change_prior_indicator_values(self):
         original = self.bars(400)
