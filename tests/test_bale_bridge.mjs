@@ -10,7 +10,7 @@ test('auth and source channel',async()=>{
 });
 test('text delivery, dedup and retry after failure',async()=>{
  const old=globalThis.fetch; let calls=0; let fail=true;
- globalThis.fetch=async(url,opts)=>{calls++;assert.ok(url.startsWith('https://api.telegram.org/'));assert.equal(opts.body.get('text'),'TEST');return Response.json({ok:!fail,result:{message_id:1}})};
+ globalThis.fetch=async(url,opts)=>{calls++;assert.equal(opts.redirect,'manual');assert.ok(url.startsWith('https://api.telegram.org/'));assert.equal(opts.body.get('text'),'TEST');return Response.json({ok:!fail,result:{message_id:1}})};
  try {const e=env(); assert.equal((await worker.fetch(req(update),e)).status,502);fail=false;
  assert.equal((await worker.fetch(req(update),e)).status,200);
  assert.equal(await (await worker.fetch(req(update),e)).text(),'Already delivered');assert.equal(calls,2);
@@ -18,10 +18,17 @@ test('text delivery, dedup and retry after failure',async()=>{
 });
 test('photo downloads from Bale and uploads bytes to Telegram',async()=>{
  const old=globalThis.fetch;let calls=0;
- globalThis.fetch=async(url,opts)=>{calls++; if(url.endsWith('/getFile'))return Response.json({ok:true,result:{file_path:'photos/chart.jpg',file_size:3}});
+ globalThis.fetch=async(url,opts)=>{calls++; assert.equal(opts.redirect,'manual'); if(url.endsWith('/getFile'))return Response.json({ok:true,result:{file_path:'photos/chart.jpg',file_size:3}});
  if(url.includes('/file/bot'))return new Response(new Uint8Array([1,2,3]));
  assert.ok(url.endsWith('/sendPhoto'));assert.equal(opts.body.get('photo').size,3);assert.equal(opts.body.get('caption'),'chart');return Response.json({ok:true,result:{}});};
  try{const d={update_id:5,message:{chat:update.message.chat,photo:[{file_id:'abc'}],caption:'chart'}};
  assert.equal((await worker.fetch(req(d),env())).status,200);assert.equal(calls,3);
  }finally{globalThis.fetch=old;}
+});
+
+test('upstream redirects are rejected without following them',async()=>{
+ const old=globalThis.fetch;let calls=0;
+ globalThis.fetch=async(url,opts)=>{calls++;assert.equal(opts.redirect,'manual');return new Response(null,{status:302,headers:{Location:'https://other.example'}});};
+ try{assert.equal((await worker.fetch(req(update),env())).status,502);assert.equal(calls,1);}
+ finally{globalThis.fetch=old;}
 });

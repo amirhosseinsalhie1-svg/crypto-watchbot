@@ -49,8 +49,11 @@ export default {
       // Fixed Telegram host and server-side bot token; never forward client headers or URLs.
       const upstream = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
         method: 'POST', headers: {'Content-Type': contentType}, body: bytes,
-        redirect: 'error', signal: AbortSignal.timeout(15000)
+        redirect: 'manual', signal: AbortSignal.timeout(15000)
       });
+      if (upstream.status >= 300 && upstream.status < 400) {
+        return reply(502, {ok: false, description: 'Upstream redirect rejected'});
+      }
       const data = await upstream.json();
       if (!data.ok) {
         return reply(upstream.status >= 400 ? upstream.status : 502,

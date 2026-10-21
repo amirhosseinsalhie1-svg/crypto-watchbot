@@ -2,7 +2,8 @@
 const MAX = 9_000_000;
 async function api(base, method, body) {
   const r = await fetch(`${base}/${method}`, {method: 'POST', body,
-    redirect: 'error', signal: AbortSignal.timeout(20000)});
+    redirect: 'manual', signal: AbortSignal.timeout(20000)});
+  if (r.status >= 300 && r.status < 400) throw new Error('Redirect rejected');
   const d = await r.json();
   if (!r.ok || !d.ok) throw new Error('Upstream request failed');
   return d.result;
@@ -53,7 +54,7 @@ export default {
           throw new Error('Invalid file');
         const image = await bounded(await fetch(
           `https://tapi.bale.ai/file/bot${env.BALE_RECEIVER_TOKEN}/${file.file_path}`,
-          {redirect: 'error', signal: AbortSignal.timeout(20000)}));
+          {redirect: 'manual', signal: AbortSignal.timeout(20000)}));
         const form = new FormData(); form.set('chat_id', env.TELEGRAM_CHAT_ID);
         form.set('caption', (msg.caption || '').slice(0, 1000));
         form.set('photo', image, 'analysis.jpg');
