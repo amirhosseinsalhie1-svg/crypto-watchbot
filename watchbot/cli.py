@@ -45,6 +45,11 @@ def main(argv=None):
     bt.add_argument("--data", required=True)
     bt.add_argument("--output", required=True)
     bt.add_argument("--ignore-news-for-research", action="store_true")
+    study = sub.add_parser("indicator-study", help="Signal-free study of indicator features on verified 5m history")
+    study.add_argument("--start", required=True)
+    study.add_argument("--end", required=True)
+    study.add_argument("--data", required=True)
+    study.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
         cfg = Config.load(args.config)
@@ -55,6 +60,9 @@ def main(argv=None):
             from .backtest import run_backtest
             result = run_backtest(cfg, args.data, parse_time(args.start), parse_time(args.end), args.output,
                                   ignore_news=args.ignore_news_for_research, progress=True)
+        elif args.command == "indicator-study":
+            from .indicator_lab import run_indicator_study
+            result = run_indicator_study(cfg, args.data, parse_time(args.start), parse_time(args.end), args.output)
         elif args.command == "dashboard":
             from .dashboard import serve
             serve(cfg, args.port)
