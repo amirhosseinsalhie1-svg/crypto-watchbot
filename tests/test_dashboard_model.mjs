@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {visibleRecords,latestFor,visibleTrades,lifecycle,answerQuestion,validateSnapshot} from '../watchbot/web/model.js';
+const make=(id,observed,asof=observed)=>({id,observed_at:observed,evidence_status:'RECORDED',analysis:{symbol:'BTCUSDT',asof,status:'TECHNICAL_CONFIRMED',side:'LONG',entry:100,stop:99,target:102,reasons:['روزانه همسو است'],counterevidence:['تریگر شکست کاذب ممکن است'],news_status:'UNKNOWN',news_note:'بازبینی نشده',strategy:'v1',config_hash:'abc',source:'synthetic'},frames:{},risk:{equity_usdt:152.37,paper_enabled:false,open_positions:0}});
+const first=make(1,1000000),late=make(2,1100000,900000),future=make(3,1400000);
+const d={kind:'watchbot-dashboard-snapshot',schema_version:1,symbols:['BTCUSDT'],records:[first,late,future]};
+test('replay uses actual observation frontier, not backdated market time',()=>{assert.deepEqual(visibleRecords(d,1050000).map(r=>r.id),[1]);assert.equal(latestFor(d,'BTCUSDT',1050000).id,1);});
+test('expired alert does not become a filled position',()=>{assert.equal(lifecycle(first,[first],1300000),'EXPIRED');assert.equal(first.analysis.status,'TECHNICAL_CONFIRMED');});
+test('invalidation needs a later observation with a finalized price bar',()=>{const later=make(4,1300000);later.frames={'5m':[{open_time:1000000,close_time:1299999,low:98,high:102}]};assert.equal(lifecycle(first,[first,later],1100000),'TECHNICAL_CONFIRMED');assert.equal(lifecycle(first,[first,later],1300000),'INVALIDATED');});
+test('answers cite only selected record fields',()=>{const reply=answerQuestion(first,'چرا رد شد؟');assert.ok(reply.text.includes('روزانه همسو است'));assert.ok(reply.fields.includes('reasons'));assert.ok(!reply.text.includes('profit'));});
+test('unknown questions are not invented',()=>{assert.equal(answerQuestion(first,'فردا قیمت چنده؟').fields.length,0);});
+test('unknown news remains explicitly unknown',()=>{assert.ok(answerQuestion(first,'وضعیت خبر؟').text.includes('UNKNOWN'));});
+test('legacy risk is not inferred from current equity',()=>{assert.ok(answerQuestion({...first,risk:null},'ریسک؟').text.includes('ثبت نشده'));});
+test('import rejects future candles and duplicate decisions',()=>{assert.throws(()=>validateSnapshot({...d,records:[first,first]}));const r=make(9,1000000);r.frames={'5m':[{open_time:1000000,close_time:1299999,open:100,high:101,low:99,close:100}]};assert.throws(()=>validateSnapshot({...d,records:[r]}));});
+test('legacy records without known observation times stay out of replay',()=>{const legacy={...first,id:10,observed_at:null};assert.equal(visibleRecords({...d,records:[legacy]},1050000).length,0);assert.equal(visibleRecords({...d,records:[legacy]},1050000,true).length,1);});
+test('trade existence and outcomes use recorded knowledge, not historical fill times',()=>{const trades=[{id:'p',entry_at:900000,exit_at:950000,pnl:10,exit:110,reason:'TARGET'}];assert.deepEqual(visibleTrades({trades},first,1000000,true),[]);const r={...first,risk:{known_trade_ids:['p'],known_closed_trade_ids:[]}};const view=visibleTrades({trades},r,1000000,true);assert.equal(view[0].pnl,null);assert.equal(view[0].reason,null);});

@@ -65,7 +65,7 @@ class IntegrationTests(unittest.TestCase):
     def test_telegram_caption_upload_and_token_not_logged(self):
         img = self.root / "chart.png"
         img.write_bytes(b"fake image for transport unit test")
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "secret-test-token", "TELEGRAM_CHAT_ID": "123"}):
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "123456:secret-test-token", "TELEGRAM_CHAT_ID": "123"}):
             tg = Telegram()
         with patch("watchbot.io.request_json", return_value={"ok": True, "result": {"message_id": 1}}) as call:
             tg.photo(str(img), "تحلیل آزمایشی")

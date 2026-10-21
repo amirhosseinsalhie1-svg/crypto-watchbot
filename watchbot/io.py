@@ -24,12 +24,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request_json(url, *, data=None, headers=None, attempts=3):
+def request_json(url, *, data=None, headers=None, attempts=3, direct=False):
     """Bounded retries; errors never expose URLs (Telegram tokens live in URLs)."""
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(url, data=data, headers=headers or {})
-            with urllib.request.build_opener(NoRedirect()).open(req, timeout=20) as response:
+            handlers = [NoRedirect()]
+            if direct:
+                handlers.append(urllib.request.ProxyHandler({}))
+            with urllib.request.build_opener(*handlers).open(req, timeout=20) as response:
                 body = response.read(8_000_001)
                 if len(body) > 8_000_000:
                     raise NetworkError("Response exceeds size limit")
@@ -124,19 +127,170 @@ class BinanceReference:
                 delay = min(30, delay * 2)
 
 
+class ToobitReference(BinanceReference):
+    """Public USDT perpetual feed; direct REST polling, no account API."""
+    BASE = "https://api.toobit.com"
+
+    def get(self, endpoint, **params):
+        if endpoint == "/fapi/v1/time":
+            path = "/api/v1/time"
+        elif endpoint == "/fapi/v1/klines":
+            path = "/quote/v1/klines"
+            symbol = params["symbol"]
+            params["symbol"] = symbol[:-4] + "-SWAP-USDT"
+        else:
+            raise ValueError("Unsupported Toobit market endpoint")
+        payload = request_json(self.BASE + path + "?" + urllib.parse.urlencode(params), direct=True)
+        if endpoint.endswith("/klines"):
+            if not isinstance(payload, list):
+                raise NetworkError("Invalid Toobit candle response")
+            duration = INTERVALS[params["interval"]]
+            normalized = []
+            for row in payload:
+                if not isinstance(row, list) or len(row) < 7:
+                    raise NetworkError("Malformed Toobit candle")
+                candle = row.copy()
+                # Live API returns 0 for close time; derive the exclusive boundary - 1.
+                opened = int(candle[0])
+                if float(candle[0]) != opened:
+                    raise NetworkError("Invalid Toobit timestamp")
+                candle[6] = opened + duration - 1
+                normalized.append(candle)
+            return normalized
+        if not isinstance(payload, dict) or "serverTime" not in payload:
+            raise NetworkError("Invalid Toobit server time response")
+        return payload
+
+    def available_symbols(self):
+        info = request_json(self.BASE + "/api/v1/exchangeInfo", direct=True)
+        if not isinstance(info, dict) or not isinstance(info.get("contracts"), list):
+            raise NetworkError("Invalid Toobit contract information")
+        return {c["symbol"].replace("-SWAP-", "") for c in info["contracts"]
+                if c.get("status") == "TRADING" and c.get("inverse") is False
+                and c.get("marginToken") == "USDT" and c.get("quoteAsset") == "USDT"
+                and c.get("symbol", "").endswith("-SWAP-USDT")}
+
+    async def listen(self, symbols, trigger):
+        while True:
+            await asyncio.sleep(self.cfg.poll_seconds)
+            trigger.set()
+
+
+class MexcReference:
+    """Public USDT perpetual candles via direct HTTPS; REST polling only."""
+    BASE = "https://api.mexc.com"
+    PERIODS = {"5m": "Min5", "4h": "Hour4", "1d": "Day1"}
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.cache = {}
+
+    def get(self, endpoint, **params):
+        payload = request_json(self.BASE + endpoint + "?" + urllib.parse.urlencode(params),
+                               direct=True)
+        if not isinstance(payload, dict) or payload.get("success") is not True or payload.get("code") != 0:
+            raise NetworkError("MEXC public API rejected request")
+        return payload["data"]
+
+    def server_time(self):
+        now = int(self.get("/api/v1/contract/ping"))
+        if abs(now - utc_ms()) > 10_000:
+            raise NetworkError("Host clock skew exceeds 10 seconds; synchronize clock")
+        return now
+
+    def available_symbols(self):
+        rows = self.get("/api/v1/contract/detail/country")
+        if isinstance(rows, dict):
+            rows = [rows]
+        return {r["symbol"].replace("_", "") for r in rows
+                if r.get("state") == 0 and r.get("futureType") == 1
+                and r.get("quoteCoin") == "USDT" and r.get("settleCoin") == "USDT"}
+
+    def snapshot(self, symbols):
+        now = self.server_time()
+        result = {}
+        for symbol in symbols:
+            result[symbol] = {}
+            for tf, duration in INTERVALS.items():
+                boundary = now // duration * duration
+                key = symbol, tf
+                if key not in self.cache or self.cache[key][0] != boundary:
+                    raw = self.get("/api/v1/contract/kline/" + symbol[:-4] + "_USDT",
+                                   interval=self.PERIODS[tf],
+                                   start=(boundary - self.cfg.history_bars * duration) // 1000,
+                                   end=boundary // 1000 - 1)
+                    keys = ("time", "open", "high", "low", "close", "vol")
+                    if (not isinstance(raw, dict) or any(not isinstance(raw.get(k), list) for k in keys)
+                            or len({len(raw[k]) for k in keys}) != 1):
+                        raise NetworkError("Malformed MEXC candle arrays")
+                    frame = pd.DataFrame({"open_time": raw["time"], "open": raw["open"],
+                                          "high": raw["high"], "low": raw["low"],
+                                          "close": raw["close"], "volume": raw["vol"]})
+                    frame["open_time"] = pd.to_numeric(frame.open_time, errors="raise") * 1000
+                    frame["close_time"] = frame.open_time + duration - 1
+                    frame = frame[frame.open_time < boundary].reset_index(drop=True)
+                    frame = validate_frame(frame, tf, now)
+                    self.cache[key] = boundary, frame
+                result[symbol][tf] = self.cache[key][1]
+        return self.server_time(), result
+
+    async def listen(self, symbols, trigger):
+        while True:
+            await asyncio.sleep(self.cfg.poll_seconds)
+            trigger.set()
+
+
 class Telegram:
     def __init__(self):
+        self.bale_token = os.getenv("BALE_SENDER_TOKEN", "").strip()
+        self.bale_chat = os.getenv("BALE_CHANNEL_ID", "").strip()
+        if bool(self.bale_token) != bool(self.bale_chat):
+            raise ValueError("Set both BALE_SENDER_TOKEN and BALE_CHANNEL_ID")
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-        self.chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        self.chat = self.bale_chat or os.getenv("TELEGRAM_CHAT_ID", "").strip()
         self.operator = os.getenv("TELEGRAM_OPERATOR_USER_ID", "").strip()
+        self.relay_url = os.getenv("TELEGRAM_RELAY_URL", "").strip().rstrip("/")
+        self.relay_key = os.getenv("TELEGRAM_RELAY_KEY", "").strip()
+        if self.bale_token:
+            self.relay_url = self.relay_key = ""
+        if bool(self.relay_url) != bool(self.relay_key):
+            raise ValueError("Set both Telegram relay URL and key")
+        if self.relay_url:
+            parsed = urllib.parse.urlsplit(self.relay_url)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+                    or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+                raise ValueError("Telegram relay URL must be an HTTPS origin")
+
+    @property
+    def authenticated(self):
+        return bool(self.bale_token) or bool(self.relay_url and self.relay_key) or bool(self.token)
+
+    def _request(self, method, data, content_type="application/x-www-form-urlencoded"):
+        if method not in {"getMe", "getUpdates", "sendMessage", "sendPhoto"}:
+            raise ValueError("Unsupported Telegram method")
+        headers = {"Content-Type": content_type}
+        if self.bale_token:
+            if (not self.bale_token.isascii() or any(ord(c) <= 32 or ord(c) == 127
+                                                     or c in "/?#" for c in self.bale_token)):
+                raise ValueError("Invalid Bale token; enter it again")
+            url = f"https://tapi.bale.ai/bot{self.bale_token}/{method}"
+        elif self.relay_url:
+            url = self.relay_url + "/telegram/" + method
+            headers["Authorization"] = "Bearer " + self.relay_key
+        else:
+            import re
+            if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", self.token):
+                raise ValueError("Invalid Telegram token format; enter it again")
+            url = f"https://api.telegram.org/bot{self.token}/{method}"
+        return request_json(url, data=data, headers=headers, attempts=1,
+                            direct=bool(self.relay_url or self.bale_token))
 
     @property
     def configured(self):
-        return bool(self.token and self.chat)
+        return bool(self.authenticated and self.chat)
 
     def call(self, method, payload):
-        result = request_json(f"https://api.telegram.org/bot{self.token}/{method}",
-                              data=urllib.parse.urlencode(payload).encode(), attempts=1)
+        result = self._request(method, urllib.parse.urlencode(payload).encode())
         if not result.get("ok"):
             raise NetworkError("Telegram rejected request; details redacted")
         return result["result"]
@@ -156,15 +310,14 @@ class Telegram:
                       'filename="analysis.png"\r\nContent-Type: image/png\r\n\r\n').encode()
                      + image + b"\r\n")
         parts.append(f"--{boundary}--\r\n".encode())
-        result = request_json(f"https://api.telegram.org/bot{self.token}/sendPhoto",
-                              data=b"".join(parts),
-                              headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, attempts=1)
+        result = self._request("sendPhoto", b"".join(parts),
+                               f"multipart/form-data; boundary={boundary}")
         if not result.get("ok"):
             raise NetworkError("Telegram photo failed; details redacted")
         return result["result"]
 
     def commands(self, journal):
-        if not self.configured:
+        if self.bale_token or not self.configured:
             return
         updates = self.call("getUpdates", {"offset": journal.get("telegram_offset", 0),
                                            "timeout": 0, "limit": 50,

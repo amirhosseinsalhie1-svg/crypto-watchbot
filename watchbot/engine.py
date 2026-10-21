@@ -8,7 +8,8 @@ import os
 
 from .core import Config, INTERVALS, analyze, utc_ms, validate_frame
 from .diagnostics import validate_snapshot
-from .io import BinanceReference, NetworkError, Telegram, load_csv
+from .control import consume_controls
+from .io import BinanceReference, MexcReference, ToobitReference, NetworkError, Telegram, load_csv
 from .journal import Journal
 from .render import caption, chart
 
@@ -95,13 +96,16 @@ class Engine:
                         if a.asof >= last + cfg.cooldown_bars * INTERVALS["5m"]:
                             j.enqueue(a, caption(a), photo)
                             j.put(f"alert:{symbol}", a.asof)
+                j.capture_evidence(a, f, now)
         return reports
 
 
 async def run_live(cfg: Config, once=False):
-    if cfg.source != "binance-usdm-reference":
-        raise ValueError("Live provider is binance-usdm-reference; use CSV for other verified sources")
-    provider, telegram = BinanceReference(cfg), Telegram()
+    if cfg.source not in ("binance-usdm-reference", "mexc-usdt-perpetual", "toobit-usdt-perpetual"):
+        raise ValueError("Unsupported live source; use Binance, MEXC, Toobit or CSV replay")
+    provider = (ToobitReference(cfg) if cfg.source == "toobit-usdt-perpetual" else
+                        MexcReference(cfg) if cfg.source == "mexc-usdt-perpetual" else BinanceReference(cfg))
+    telegram = Telegram()
     available = await asyncio.to_thread(provider.available_symbols)
     missing = set(cfg.symbols) - available
     if missing:
@@ -110,11 +114,12 @@ async def run_live(cfg: Config, once=False):
         engine = Engine(cfg)
         trigger = asyncio.Event()
         task = asyncio.create_task(provider.listen(cfg.symbols, trigger)) if not once else None
-        print("PAPER/RESEARCH ONLY | Binance reference feed | Telegram " +
+        print("PAPER/RESEARCH ONLY | " + cfg.source + " | Telegram " +
               ("configured" if telegram.configured else "disabled (no credentials)"), flush=True)
         try:
             while True:
                 try:
+                    consume_controls(engine.journal, utc_ms())
                     # Commands commit before scan, so pause takes effect immediately.
                     try:
                         telegram.commands(engine.journal)

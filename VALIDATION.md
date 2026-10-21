@@ -14,3 +14,28 @@
 - No measured strategy win rate, backtested profit, live trading result or safety guarantee. Synthetic fixtures verify behavior, not financial performance.
 
 Run `python -m unittest discover -s tests -v` after installation. Deployment requires a host that can access the selected public data provider legitimately, a private Telegram bot token, an explicit destination and durable storage.
+
+## Python 3.15 compatibility (2026-10-21)
+
+Local Linux validation used CPython 3.15.0rc3 (the available uv runtime),
+NumPy 2.5.4, pandas 3.0.6, matplotlib 3.11.2, and websockets 15.0.1.
+All 41 existing unit/integration tests passed. Offline doctor returned ok=true,
+and synthetic demo completed for all four configured symbols.
+Windows and final CPython 3.15.0 were not run locally; CI now includes
+Python 3.15 on Windows and Linux. Live market connectivity was not tested.
+
+## MEXC adapter
+
+44 local tests passed on Python 3.12, including mocked MEXC seconds/milliseconds conversion, open-candle exclusion, three-timeframe cache, clock skew rejection, and enabled perpetual filtering. Offline MEXC doctor passed. Live full-snapshot access could not be verified from this environment (non-JSON network responses). User independently verified direct MEXC ping and 2000 BTC Min5 candles on Windows Python 3.15.0. All configured symbols and timeframes still require live doctor validation on that host.
+
+## Toobit adapter
+
+User confirmed direct server-time and 300 BTC-SWAP-USDT five-minute candles on Windows Python 3.15.0. Live rows had zero close-time values. New mocked tests cover derived close times, unfinished candle exclusion, symbol mapping, all three timeframes, cache, contract eligibility, and API error payload rejection. Full live four-symbol snapshot must still be checked on the user host.
+
+## Toobit dashboard integration
+
+57 Python tests and 14 JavaScript tests passed locally. Dashboard tests verify closed-candle evidence persistence, immutable observation frontiers, legacy record handling, SQLite read-only snapshots, HTTP asset/origin behavior, and queued pause/resume controls. Full Toobit live snapshot already passed on the user host; dashboard live operation still requires host verification.
+
+## Dedicated Telegram relay
+
+61 Python tests and 5 new Worker tests passed locally (mocked upstream); no Cloudflare deployment or real Telegram delivery performed. Relay tests check authenticated routing, multipart forwarding, HTTPS origin validation, invalid-token redaction, method allowlist, fixed upstream host and exception redaction.
