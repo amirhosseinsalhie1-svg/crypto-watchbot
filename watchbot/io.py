@@ -242,11 +242,17 @@ class MexcReference:
 
 class Telegram:
     def __init__(self):
+        self.bale_token = os.getenv("BALE_SENDER_TOKEN", "").strip()
+        self.bale_chat = os.getenv("BALE_CHANNEL_ID", "").strip()
+        if bool(self.bale_token) != bool(self.bale_chat):
+            raise ValueError("Set both BALE_SENDER_TOKEN and BALE_CHANNEL_ID")
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-        self.chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        self.chat = self.bale_chat or os.getenv("TELEGRAM_CHAT_ID", "").strip()
         self.operator = os.getenv("TELEGRAM_OPERATOR_USER_ID", "").strip()
         self.relay_url = os.getenv("TELEGRAM_RELAY_URL", "").strip().rstrip("/")
         self.relay_key = os.getenv("TELEGRAM_RELAY_KEY", "").strip()
+        if self.bale_token:
+            self.relay_url = self.relay_key = ""
         if bool(self.relay_url) != bool(self.relay_key):
             raise ValueError("Set both Telegram relay URL and key")
         if self.relay_url:
@@ -257,13 +263,18 @@ class Telegram:
 
     @property
     def authenticated(self):
-        return bool(self.relay_url and self.relay_key) or bool(self.token)
+        return bool(self.bale_token) or bool(self.relay_url and self.relay_key) or bool(self.token)
 
     def _request(self, method, data, content_type="application/x-www-form-urlencoded"):
         if method not in {"getMe", "getUpdates", "sendMessage", "sendPhoto"}:
             raise ValueError("Unsupported Telegram method")
         headers = {"Content-Type": content_type}
-        if self.relay_url:
+        if self.bale_token:
+            if (not self.bale_token.isascii() or any(ord(c) <= 32 or ord(c) == 127
+                                                     or c in "/?#" for c in self.bale_token)):
+                raise ValueError("Invalid Bale token; enter it again")
+            url = f"https://tapi.bale.ai/bot{self.bale_token}/{method}"
+        elif self.relay_url:
             url = self.relay_url + "/telegram/" + method
             headers["Authorization"] = "Bearer " + self.relay_key
         else:
@@ -271,7 +282,8 @@ class Telegram:
             if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", self.token):
                 raise ValueError("Invalid Telegram token format; enter it again")
             url = f"https://api.telegram.org/bot{self.token}/{method}"
-        return request_json(url, data=data, headers=headers, attempts=1, direct=bool(self.relay_url))
+        return request_json(url, data=data, headers=headers, attempts=1,
+                            direct=bool(self.relay_url or self.bale_token))
 
     @property
     def configured(self):
@@ -305,7 +317,7 @@ class Telegram:
         return result["result"]
 
     def commands(self, journal):
-        if not self.configured:
+        if self.bale_token or not self.configured:
             return
         updates = self.call("getUpdates", {"offset": journal.get("telegram_offset", 0),
                                            "timeout": 0, "limit": 50,
