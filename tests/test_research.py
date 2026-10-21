@@ -66,7 +66,7 @@ class ResearchTests(unittest.TestCase):
     def test_extension_defaults_preserve_existing_config_hash(self):
         c = Config()
         old = asdict(c)
-        for key in ["strategy_profile", "entry_windows", "session_timezone", "tp1_close_fraction", "tp1_reward_risk"]:
+        for key in ["strategy_profile", "entry_windows", "session_timezone", "tp1_close_fraction", "tp1_reward_risk", "setup_id", "max_open_positions", "min_net_reward_risk", "paper_leverage"]:
             old.pop(key)
         self.assertEqual(c.fingerprint(), hashlib.sha256(json.dumps(old, sort_keys=True).encode()).hexdigest()[:16])
 
@@ -127,6 +127,25 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(j.summary()["closed_trades"], 0)
         self.assertEqual(j.summary()["open_positions"], 1)
         self.assertLess(marked_equity(j, {"SOLUSDT": 99.5}, NOW + 300000), self.cfg.equity)
+
+    def test_position_remains_open_past_planning_horizon_until_target(self):
+        cfg = replace(self.cfg, max_hold_bars=1, tp1_close_fraction=0)
+        j = self.journal(cfg)
+        self.enter(j)
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW + 300000, high=100.5, low=99.5, close=100), ignore_news=True)
+        trade = j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertIsNone(trade["exit_at"])
+        self.assertEqual(j.summary()["open_positions"], 1)
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW + 600000, high=104, low=99.5, close=103.5), ignore_news=True)
+        trade = j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertEqual(trade["reason"], "TARGET")
+        self.assertEqual(j.summary()["open_positions"], 0)
+
+    def test_unknown_setup_id_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown setup_id"):
+            replace(self.cfg, setup_id="not-registered")
 
     def test_missing_news_still_blocks_paper_entry(self):
         j = self.journal()

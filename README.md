@@ -209,3 +209,8 @@ CI فقط تست و دمو را اجرا می‌کند؛ برای اجرای د�
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 - [GitHub Actions scheduled event limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - [KCEX User Agreement](https://www.kcex.com/en-US/support/articles/23962442522649): هنگام بررسی در ۲۰ اکتبر ۲۰۲۶ ایران در فهرست محدودیت بود؛ اتصال KCEX در این پروژه پیاده نشده است. اطلاعات محدودیت حساب و سرویس را از مرجع رسمی زمان استفاده بررسی کنید.
+
+
+## پیکربندی‌های پژوهشی جداگانه
+
+برای دیدبان ده‌نمادی دارایی‌های جاافتاده‌تر از `config.trending.json` استفاده کنید؛ این فهرست رتبه‌بندی زندهٔ حجم نیست و دیتابیس جدا دارد. قواعد ستاپ شکست محدوده و دستور مقایسهٔ بک‌تست در [راهنمای افزودن ستاپ](docs/ADDING_SETUPS_FA.md) آمده است. فایل `config.range-breakout.json` برای بک‌تست جداگانهٔ BTC و SOL آماده شده است؛ [فهرست دارایی‌ها و اجرای دیدبان](docs/TREND_WATCHLIST_FA.md) نیز جزئیات دارد.

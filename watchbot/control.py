@@ -52,7 +52,7 @@ def consume_controls(journal, now: int):
                 if valid:
                     journal.put("paused", action == "pause")
                     if action == "pause":
-                        journal.put("pending", None)
+                        journal.clear_pending()
                 journal.event(now, "CONTROL_APPLIED" if valid else "CONTROL_REJECTED", item)
                 journal.put("control:" + ident, True)
         path.unlink()

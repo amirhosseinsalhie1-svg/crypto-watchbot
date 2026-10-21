@@ -61,7 +61,9 @@ def snapshot(cfg: Config, limit: int = 240) -> dict:
             "daily_loss_fraction": cfg.daily_loss_fraction, "risk_fraction": cfg.risk_fraction,
             "max_closed_equity_drawdown": meta.get("max_drawdown", 0),
             "position_state": meta.get("position_state"),
+            "position_states": meta.get("position_states", {}),
             "pending": meta.get("pending") is not None,
+            "pending_count": len(meta.get("pending_orders", [])),
             "open_positions": sum(t["exit_at"] is None for t in result["trades"])}
     result["health"]["status"] = "NO_HEARTBEAT"
     try:

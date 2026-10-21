@@ -81,11 +81,60 @@ class PaperTests(unittest.TestCase):
         self.step(bar(NOW, high=105, low=95))
         self.assertEqual(self.j.summary(), before)
 
-    def test_only_one_position_and_pending_globally(self):
+    def test_default_portfolio_keeps_only_one_pending_signal(self):
         self.seed()
         with self.j.transaction():
             self.j.schedule(replace(self.a, symbol="BTCUSDT", signal_id="two"))
         self.assertEqual(self.j.get("pending")["symbol"], "SOLUSDT")
+
+    def test_two_slots_rank_candidates_and_reject_third(self):
+        cfg = replace(self.cfg, database=str(Path(self.tmp.name) / "portfolio.sqlite3"), max_open_positions=2)
+        j = Journal(cfg)
+        self.addCleanup(j.close)
+        weaker = replace(self.a, symbol="BTCUSDT", signal_id="weak", stop=99.5, target=102)
+        stronger = replace(self.a, symbol="ETHUSDT", signal_id="strong", stop=99.5, target=104)
+        third = replace(self.a, symbol="XRPUSDT", signal_id="third", stop=99.5, target=103)
+        with j.transaction():
+            j.schedule_many([weaker, stronger, third])
+        self.assertEqual([p["signal_id"] for p in j._pending_orders()], ["strong", "third"])
+
+    def test_net_rr_minimum_and_leverage_range(self):
+        with self.assertRaises(ValueError):
+            replace(self.cfg, paper_leverage=9)
+        cfg = replace(self.cfg, database=str(Path(self.tmp.name) / "rr.sqlite3"), reward_risk=2, min_net_reward_risk=3)
+        j = Journal(cfg)
+        self.addCleanup(j.close)
+        with j.transaction():
+            j.schedule(self.a)
+        self.assertEqual(j._pending_orders(), [])
+        self.assertEqual(j.db.execute("SELECT COUNT(*) FROM events WHERE kind='PAPER_RR_BLOCKED'").fetchone()[0], 1)
+
+    def test_open_trade_records_configured_leverage(self):
+        self.seed()
+        self.step(bar(NOW, op=100.1, high=100.5))
+        trade = self.j.db.execute("SELECT leverage,initial_margin,qty,entry FROM trades").fetchone()
+        self.assertEqual(trade[0], 10)
+        self.assertAlmostEqual(trade[1], trade[2] * trade[3] / 10)
+
+    def test_two_positions_keep_independent_stops_and_states(self):
+        cfg = replace(self.cfg, database=str(Path(self.tmp.name) / "two-open.sqlite3"), max_open_positions=2)
+        j = Journal(cfg)
+        self.addCleanup(j.close)
+        first = replace(self.a, symbol="SOLUSDT", signal_id="sol")
+        second = replace(self.a, symbol="BTCUSDT", signal_id="btc")
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW - 300_000))
+            j.advance("BTCUSDT", bar(NOW - 300_000))
+            j.schedule_many([first, second], ignore_news=True)
+            j.advance("SOLUSDT", bar(NOW, low=99.5), ignore_news=True)
+            j.advance("BTCUSDT", bar(NOW, low=99.5), ignore_news=True)
+        self.assertEqual(j.summary()["open_positions"], 2)
+        self.assertEqual(len(j.get("position_states")), 2)
+        with j.transaction():
+            j.advance("SOLUSDT", bar(NOW + 300_000, low=98.9), ignore_news=True)
+            j.advance("BTCUSDT", bar(NOW + 300_000, low=99.5), ignore_news=True)
+        self.assertEqual(j.summary()["open_positions"], 1)
+        self.assertEqual(set(j.get("position_states")), {"btc"})
 
     def test_daily_loss_and_two_losses_stop(self):
         with self.j.transaction():
@@ -111,13 +160,19 @@ class PaperTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Journal(replace(self.cfg, fee_bps_per_side=8))
 
-    def test_timeout_closes_position(self):
+    def test_position_stays_open_after_planning_horizon_until_target(self):
         self.seed()
+        self.step(bar(NOW))
         with self.j.transaction():
-            self.j.advance("SOLUSDT", bar(NOW), ignore_news=True)
             self.j.db.execute("UPDATE trades SET bars=?", (self.cfg.max_hold_bars - 1,))
         self.step(bar(NOW + 300_000))
-        self.assertEqual(self.j.db.execute("SELECT reason FROM trades").fetchone()[0], "TIMEOUT")
+        trade = self.j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertIsNone(trade["exit_at"])
+        self.assertEqual(self.j.summary()["open_positions"], 1)
+        self.step(bar(NOW + 600_000, high=103, low=99.5, close=102.5))
+        trade = self.j.db.execute("SELECT * FROM trades").fetchone()
+        self.assertEqual(trade["reason"], "TARGET")
+        self.assertEqual(self.j.summary()["open_positions"], 0)
 
     def test_history_gap_halts(self):
         self.seed()

@@ -79,6 +79,7 @@ class Engine:
                 pass
         with j.transaction():
             events = []
+            candidates = []
             for symbol, f in prepared.items():
                 bars = f["5m"]
                 cursor = j.get(f"cursor:{symbol}")
@@ -108,7 +109,7 @@ class Engine:
                 if already:
                     continue
                 if not j.get("paused", False):
-                    j.schedule(a, ignore_news=ignore_news)
+                    candidates.append(a)
                 should_render = f and (render_all or (render_signals and a.status == "TECHNICAL_CONFIRMED"))
                 if should_render:
                     photo = chart(a, f, cfg.output_dir)
@@ -122,6 +123,7 @@ class Engine:
                             j.enqueue(a, caption(a), photo)
                             j.put(f"alert:{symbol}", a.asof)
                 j.capture_evidence(a, f, now)
+            j.schedule_many(candidates, ignore_news=ignore_news)
         return reports
 
 

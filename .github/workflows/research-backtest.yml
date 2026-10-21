@@ -1,0 +1,67 @@
+name: timeframe-and-setup-and-retest-research
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - feature/evidence-dashboard
+  push:
+    branches:
+      - feature/dashboard-reference-and-setup-extensibility
+    paths:
+      - "watchbot/**"
+      - "scripts/compare_timeframes.py"
+      - "config.trend-pullback.research.json"
+      - "config.range-breakout.json"
+      - "config.price-action-candlestick.json"
+      - "config.breakout-retest.json"
+      - "tests/test_setup_*.py"
+      - ".github/workflows/research-backtest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install .
+
+      - name: Download checksum-verified Binance USD-M history with 15m warmup
+        run: >-
+          python -m watchbot
+          --config config.range-breakout.json
+          history
+          --start 2026-08-28T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --output runtime/research-data
+
+      - name: Compare all setups on 5m and 15m
+        run: >-
+          python scripts/compare_timeframes.py
+          --start 2026-09-01T00:00:00Z
+          --end 2026-09-08T00:00:00Z
+          --data runtime/research-data
+          --output runtime/reports
+
+      - name: Upload compact JSON reports (exclude bulky event ledgers)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 5m-vs-15m-retest-session-research-2026-09-01-to-09-08
+          path: |
+            runtime/reports/timeframe-comparison.json
+            runtime/reports/*/*/report-dir/report.json
+          if-no-files-found: error
+          retention-days: 30
