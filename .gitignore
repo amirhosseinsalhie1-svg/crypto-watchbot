@@ -6,3 +6,4 @@ runtime/
 *.sqlite*
 build/
 dist/
+.venv315/

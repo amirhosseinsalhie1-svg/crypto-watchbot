@@ -14,3 +14,12 @@
 - No measured strategy win rate, backtested profit, live trading result or safety guarantee. Synthetic fixtures verify behavior, not financial performance.
 
 Run `python -m unittest discover -s tests -v` after installation. Deployment requires a host that can access the selected public data provider legitimately, a private Telegram bot token, an explicit destination and durable storage.
+
+## Python 3.15 compatibility (2026-10-21)
+
+Local Linux validation used CPython 3.15.0rc3 (the available uv runtime),
+NumPy 2.5.4, pandas 3.0.6, matplotlib 3.11.2, and websockets 15.0.1.
+All 41 existing unit/integration tests passed. Offline doctor returned ok=true,
+and synthetic demo completed for all four configured symbols.
+Windows and final CPython 3.15.0 were not run locally; CI now includes
+Python 3.15 on Windows and Linux. Live market connectivity was not tested.

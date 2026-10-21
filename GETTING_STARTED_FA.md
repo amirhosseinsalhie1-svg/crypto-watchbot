@@ -6,7 +6,7 @@
 
 ۱. تب **Code**: کد Python، تنظیمات نمونه، راهنما و فایل‌های Docker موجودند.
 
-۲. تب **Actions**: گردش‌کار `verify` تست‌ها، بررسی آفلاین آمادگی و تولید دمو را برای Python 3.11، 3.12 و 3.13 اجرا می‌کند. سبزشدن آن فقط اجرای درست بررسی‌های خودکار را نشان می‌دهد؛ اتصال زنده و سودآوری را تأیید نمی‌کند.
+۲. تب **Actions**: گردش‌کار `verify` تست‌ها، بررسی آفلاین آمادگی و تولید دمو را برای Python 3.11، 3.12 و 3.13 روی لینوکس و 3.15 روی لینوکس و ویندوز اجرا می‌کند. سبزشدن آن فقط اجرای درست بررسی‌های خودکار را نشان می‌دهد؛ اتصال زنده و سودآوری را تأیید نمی‌کند.
 
 ۳. GitHub کد را نگه می‌دارد و آزمایش می‌کند. روشن‌بودن ربات شبانه‌روزی نیازمند میزبان دائمی و فضای ذخیره‌سازی پایدار است. نصب برنامه روی گوشی برای دیدن کد و نتیجهٔ Actions لازم نیست.
 
@@ -35,3 +35,21 @@
 - بازپخش دادهٔ واقعی و ارزیابی خارج از نمونه با هزینه‌ها.
 
 هیچ مسیر سفارش واقعی در این پروژه وجود ندارد. نمودارهای پوشهٔ examples نمونهٔ ساختگی‌اند.
+
+## نصب در PowerShell با Python 3.15
+
+در پوشهٔ پروژه، بلوک زیر را اجرا کنید. فعال‌سازی محیط لازم نیست و شکست هر مرحله اجرای مراحل بعد را متوقف می‌کند. برای 3.15 از pandas 3.0.6 یا جدیدتر در شاخهٔ 3 استفاده می‌شود.
+
+```powershell
+& {
+    py -3.15 -m venv .venv315
+    if ($LASTEXITCODE -ne 0) { throw "Python 3.15 environment creation failed" }
+    .\.venv315\Scripts\python.exe -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
+    .\.venv315\Scripts\python.exe -m pip install --only-binary=numpy,pandas,matplotlib .
+    if ($LASTEXITCODE -ne 0) { throw "Installation failed" }
+    .\.venv315\Scripts\python.exe -m watchbot doctor
+    if ($LASTEXITCODE -ne 0) { throw "Offline checks failed" }
+    .\.venv315\Scripts\python.exe -m watchbot doctor --live
+}
+```
