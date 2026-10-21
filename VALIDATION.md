@@ -31,3 +31,7 @@ Python 3.15 on Windows and Linux. Live market connectivity was not tested.
 ## Toobit adapter
 
 User confirmed direct server-time and 300 BTC-SWAP-USDT five-minute candles on Windows Python 3.15.0. Live rows had zero close-time values. New mocked tests cover derived close times, unfinished candle exclusion, symbol mapping, all three timeframes, cache, contract eligibility, and API error payload rejection. Full live four-symbol snapshot must still be checked on the user host.
+
+## Toobit dashboard integration
+
+57 Python tests and 14 JavaScript tests passed locally. Dashboard tests verify closed-candle evidence persistence, immutable observation frontiers, legacy record handling, SQLite read-only snapshots, HTTP asset/origin behavior, and queued pause/resume controls. Full Toobit live snapshot already passed on the user host; dashboard live operation still requires host verification.

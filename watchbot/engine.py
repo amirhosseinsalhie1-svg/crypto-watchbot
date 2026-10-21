@@ -8,6 +8,7 @@ import os
 
 from .core import Config, INTERVALS, analyze, utc_ms, validate_frame
 from .diagnostics import validate_snapshot
+from .control import consume_controls
 from .io import BinanceReference, MexcReference, ToobitReference, NetworkError, Telegram, load_csv
 from .journal import Journal
 from .render import caption, chart
@@ -95,6 +96,7 @@ class Engine:
                         if a.asof >= last + cfg.cooldown_bars * INTERVALS["5m"]:
                             j.enqueue(a, caption(a), photo)
                             j.put(f"alert:{symbol}", a.asof)
+                j.capture_evidence(a, f, now)
         return reports
 
 
@@ -117,6 +119,7 @@ async def run_live(cfg: Config, once=False):
         try:
             while True:
                 try:
+                    consume_controls(engine.journal, utc_ms())
                     # Commands commit before scan, so pause takes effect immediately.
                     try:
                         telegram.commands(engine.journal)

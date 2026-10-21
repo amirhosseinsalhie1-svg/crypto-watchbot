@@ -14,3 +14,6 @@ watchbot = "watchbot.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["watchbot*"]
+
+[tool.setuptools.package-data]
+watchbot = ["web/*.html", "web/*.css", "web/*.js"]
